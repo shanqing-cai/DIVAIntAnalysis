@@ -2,3 +2,32 @@ DIVAIntAnalysis
 ===============
 
 Scripts for analyzing the results from the DIVA Intensity Shift Experiment (CadLab)
+
+Main program: intShift_analysis_1.m 
+
+Usage: intShift_analysis_1(bCD, nStresses, reverseOpt, otherOpts)
+Inputs: 
+  bCD - a 0/1 variable that indicates whether contrast distance (1) or asbolute values (0) are shown. 
+  nStresse - vector for specifying the stress positions to include in the analysis.
+            e.g., [1, 2] - both sentences with stress on word 1 and sentences with stress on word 2
+                  [1] - only sentences with stress on word 1
+                  
+  reverseOpt - option to reverse stressed and unstressed, for looking at the absolute values from the unstressed words. 
+          NOTE: this option only works under bCD = 0. Do not use this option with bCD = 1.
+          For example, if you want to look at the absolute values from the unstressed words (words 1 or 2) of all sentences 
+          Do: 
+            intShift_analysis_1(0, [1, 2], 'reverse')
+          Or, if you want to look at the absolute values from the unstressed words on position 1, do:
+            intShift_analysis_1(0, [2], 'reverse')
+            Note that we put [2], instead of [1] here, because when word 2 is stressed, word 1 is unstressed. 
+            
+  otherOpts - additional options, such as "showByEpoch" and "showIndS" (see examples below).
+            
+Usage exapmles:
+  1. Contrast distance, from stressed words as both position 1 and 2: intShift_analysis_1(1, [1, 2])
+  2. Same as above, but show epoch-by-epoch data: intShift_analysis_1(1, [1, 2], 'showByEpoch')
+  3. Same as above, but show data from individual subjects: intShift_analysis_1(1, [1, 2], 'showIndS')
+  4. Absolute values, from stressed words at positions 1 and 2: intShift_analysis_1(0, [1, 2])
+  5. Absolute values, from only stressed words at position 2: intShift_analysis_1(0, [2])
+  6. Absolute values, from unstressed words at positions 1 and 2: intShift_analysis_1(0, [1, 2], 'reverse')
+            
