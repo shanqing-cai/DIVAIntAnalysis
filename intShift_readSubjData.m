@@ -3,7 +3,7 @@ function sData = intShift_readSubjData(dataFN, bCD, varargin)
 %                '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t\t%s\t%s\t%s\t%s\t\t%s\t%s\t%s\t%s\t\t%s\t%s\t%s\t%s\t\t%s\t%s\t%s\t%s\t\t%s\t%s\t%s\t%s\t\t%s\t%s\t%s\t%s\t\t%s\t%s\t%s\t%s\t\t%s\t%s\t%s\t%s\t\t%s\t%s\t%s\t%s\t\t%s\t%s\t%s', ...
 %                'delimiter', '\n');
 
-DEBUG = 1;
+DEBUG = 0;
 
 nStresses = [1, 2];
 if ~isempty(fsic(varargin, 'nStresses'))
