@@ -29,6 +29,10 @@ cmI_w1 = strmatch('W1_mI', headers, 'exact');
 cDur_w1 = strmatch('W1_dur', headers, 'exact');
 cPhase = strmatch('Phase', headers, 'exact');
 cStim = strmatch('Stimulus', headers, 'exact');
+if isempty(cStim)
+    cStim = strmatch('Stimuli', headers, 'exact');
+end
+
 cEpoch = strmatch('Epoch', headers, 'exact');
 
 txt = txt(3 : end);
