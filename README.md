@@ -5,6 +5,10 @@ Scripts for analyzing the results from the DIVA Intensity Shift Experiment (CadL
 
 Main program: intShift_analysis_1.m 
 
+You will need to modify lines 3 and 12 for 
+  1) where the two data folders (DN and UP) are and 
+  2) where the individual-subject plots will be saved
+
 Usage: intShift_analysis_1(bCD, nStresses, reverseOpt, otherOpts)
 Inputs: 
   bCD - a 0/1 variable that indicates whether contrast distance (1) or asbolute values (0) are shown. 
