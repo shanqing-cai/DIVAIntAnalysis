@@ -1,4 +1,16 @@
 function intShift_analysis_1(bCD, nStresses, varargin)
+%% Optional input arguments
+% cpa: 
+%           Calculate composite prosody score.
+% showByEpoch:
+%           Show data by epochs
+% showIndS: 
+%           Show data from individual subjects
+% reverse:
+%           Reverse data between stressed (perturbed) and unstressed
+%           (unpertrubed) words, e.g., for looking at the data from the
+%           unstresed words
+
 %% CONFIG
 DATA_DIR = 'E:\DATA_CadLab\IntensityShift_normal';
 % DATA_DIR = 'E:\DATA_CadLab\IntensityShift_normal\July2012_bak';
@@ -11,10 +23,15 @@ NEPOCHS = 60;
 
 indS_figs_dir = 'E:\speechres\cadlab\indS_figs';
 
+wPros = [1.0, 1.0, 1.0];    % For CPA: prosody weights: [w_intensity, w_F0 and w_dur]
+
+P_UNC_THRESH_BY_EPOCH = 0.05;
+
 %% Input arguments / options
 bShowIndS = ~isempty(fsic(varargin, 'showIndS'));
 bShowByEpoch = ~isempty(fsic(varargin, 'showByEpoch'));
 bReverse = ~isempty(fsic(varargin, 'reverse'));
+bCPA = ~isempty(fsic(varargin, 'cpa')) || ~isempty(fsic(varargin, 'CPA'));
 
 if bCD && bReverse
     error('reverse can not be used with contrast distance');
@@ -127,6 +144,19 @@ for i0 = 1 : numel(SDIRS)
     end
 end
 
+%% Optional:  Calculate the composite prosody adaptation (CPA) score
+if bCPA
+    cpa_byP = struct;
+    cpa_byE = struct;
+    for i1 = 1 : numel(SDIRS)
+        sDir = SDIRS{i1};
+
+        cpa_byP.(sDir) = (rmI_byP.(sDir) * wPros(1) + rmF0_byP.(sDir) * wPros(2) + rdur_byP.(sDir) * wPros(3)) / sum(wPros);
+        cpa_byE.(sDir) = (rmI_byE.(sDir) * wPros(1) + rmF0_byE.(sDir) * wPros(2) + rdur_byE.(sDir) * wPros(3)) / sum(wPros);
+
+    end
+end
+
 %% 
 nPhases = numel(PHASES);
 if bShowIndS
@@ -159,11 +189,18 @@ if bShowIndS
     end
 end
 
+
+
 %% Visualization and some comparisons
 figure('Position', [50, 50, 1200, 350]);
 
-for j0 = 1 : 3
-    subplot(1, 3, j0);
+for j0 = 1 : 3 + bCPA
+    if j0 == 4
+        figure('Name', 'Composite prosody adaptation');
+    else
+        subplot(1, 3, j0);
+    end
+    
     hold on;
         
     if j0 == 1
@@ -178,6 +215,10 @@ for j0 = 1 : 3
         meas = rdur_byP;
         meas1 = dur_byP;
         measName = 'duration';
+    elseif j0 == 4
+        meas = cpa_byP;
+        meas1 = [];
+        measName = 'CPA';
     end
     
     for i0 = 1 : numel(SDIRS)
@@ -215,8 +256,13 @@ for j0 = 1 : 3
         ps_t = nan(1, numel(PHASES));
         mean_meas = mean(meas.(sDir));  
         ys = get(gca, 'YLim');
-        for i1 = 2 : numel(PHASES)            
-            [h_foo, ps_t(i1)] = ttest(meas1.(sDir)(:, i1), meas1.(sDir)(:, 1));
+        for i1 = 2 : numel(PHASES)
+            if j0 < 4
+                [h_foo, ps_t(i1)] = ttest(meas1.(sDir)(:, i1), meas1.(sDir)(:, 1));
+            else
+                [h_foo, ps_t(i1)] = ttest(meas.(sDir)(:, i1) - 1);
+            end
+            
             
             if ps_t(i1) < 0.05
                 fw = 'bold';
@@ -230,35 +276,40 @@ for j0 = 1 : 3
     end
     
     % Within-group, RM-ANOVA with post-hoc Tukey
-    for i1 = 1 : numel(SDIRS)
-        sDir = SDIRS{i1};
-        rma_res = RM_ANOVA_1W(meas1.(sDir), PHASES, ...
-                              'contrasts', {[-1, 1, 0, 0], ...
-                                            [-1, 0, 1, 0], ...
-                                            [-1, 0, 0, 1]});
-        fprintf('%s: sDir = %s: RM-ANOVA results:\n', ...
-                measName, sDir);
-        fprintf('Omnibus: F(%d, %d) = %.3f, p = %3f\n', ...
-                rma_res.omniRes.df_A, rma_res.omniRes.df_SA, ...
-                rma_res.omniRes.F, rma_res.omniRes.p);
-        fprintf('Post-hoc Tukey HSD: \n');
-        fprintf('\tBase vs. Ramp: h = %d\n', ...
-                rma_res.tukeyRes{1}.h);
-        fprintf('\tBase vs. Pert: h = %d\n', ...
-                rma_res.tukeyRes{2}.h);
-        fprintf('\tBase vs. Post: h = %d\n', ...
-                rma_res.tukeyRes{3}.h);
-    end
-    fprintf('\n');
-    
+    if j0 < 4
+        for i1 = 1 : numel(SDIRS)
+            sDir = SDIRS{i1};
+            rma_res = RM_ANOVA_1W(meas1.(sDir), PHASES, ...
+                                  'contrasts', {[-1, 1, 0, 0], ...
+                                                [-1, 0, 1, 0], ...
+                                                [-1, 0, 0, 1]});
+            fprintf('%s: sDir = %s: RM-ANOVA results:\n', ...
+                    measName, sDir);
+            fprintf('Omnibus: F(%d, %d) = %.3f, p = %3f\n', ...
+                    rma_res.omniRes.df_A, rma_res.omniRes.df_SA, ...
+                    rma_res.omniRes.F, rma_res.omniRes.p);
+            fprintf('Post-hoc Tukey HSD: \n');
+            fprintf('\tBase vs. Ramp: h = %d\n', ...
+                    rma_res.tukeyRes{1}.h);
+            fprintf('\tBase vs. Pert: h = %d\n', ...
+                    rma_res.tukeyRes{2}.h);
+            fprintf('\tBase vs. Post: h = %d\n', ...
+                    rma_res.tukeyRes{3}.h);
+        end
+        fprintf('\n');
+    end 
 end
 
 %% Visualization: by Epoch
 if bShowByEpoch
     figure('Position', [50, 50, 1400, 350]);
 
-    for j0 = 1 : 3
-        subplot(1, 3, j0);
+    for j0 = 1 : 3 + bCPA
+        if j0 == 4
+            figure('Name', 'CPA by epoch');
+        else
+            subplot(1, 3, j0);
+        end
         hold on;
 
         if j0 == 1
@@ -273,13 +324,17 @@ if bShowByEpoch
             meas = rdur_byE;
             meas1 = dur_byE;
             measName = 'duration';
+        else
+            meas = cpa_byE;
+            meas1 = [];
+            measName = 'CPA';
         end
 
         for i0 = 1 : numel(SDIRS)
             sDir = SDIRS{i0};
             errorbar(1 : size(meas.(sDir), 2), ...
                      mean(meas.(sDir)), ste(meas.(sDir)), ...
-                     'o-', 'Color', colors.(sDir));
+                     '-', 'Color', colors.(sDir));
         end
         xlabel('Phase');
         if bCD
@@ -295,10 +350,37 @@ if bShowByEpoch
         % Between-group, same-phase t-tests
         ys = get(gca, 'YLim');
         for i1 = 2 : NEPOCHS
-            [h_t2, p_t2] = ttest2(meas.(SDIRS{1})(:, i1), meas.(SDIRS{2})(:, i1));        
+            % -- Between-group significance -- %
+            [~, p_t2] = ttest2(meas.(SDIRS{1})(:, i1), meas.(SDIRS{2})(:, i1));
+            if p_t2 < P_UNC_THRESH_BY_EPOCH
+                plot(i1, ys(2) - 0.04 * range(ys), 'k*', 'MarkerSize', 7);
+            end
+            
+            % -- Within-group significance -- %
+            for i2 = 1 : numel(SDIRS)
+                sDir = SDIRS{i2};
+                
+                [~, p_t1] = ttest(meas.(sDir)(:, i1) - 1);
+                if p_t1 < P_UNC_THRESH_BY_EPOCH
+                    mkFaceClr = colors.(sDir);
+                else
+                    mkFaceClr = [1, 1, 1];
+                end
+                
+                if j0 < 4
+                    mkSize = 5;
+                else
+                    mkSize = 7;
+                end
+                
+                plot(i1, mean(meas.(sDir)(:, i1)), 'o', ...
+                     'MarkerEdgeColor', colors.(sDir), ...
+                     'MarkerFaceColor', mkFaceClr, ...
+                     'MarkerSize', mkSize);
+            end
 %             text(i1 - 0.3, ys(2) - 0.05 * range(ys), sprintf('%.2f', p_t2), 'FontSize', 6);
         end
-        text(0.1, ys(2) - 0.05 * range(ys), 'b/w group:');
+        text(0.1, ys(2) - 0.04 * range(ys), 'b/w group:');
 
         legend(SDIRS, 'Location', 'Southwest');
         plot([0, NEPOCHS + 1], [1, 1], '-', 'Color', [0.5, 0.5, 0.5]);

@@ -5,7 +5,7 @@ Scripts for analyzing the results from the DIVA Intensity Shift Experiment (CadL
 
 Main program: intShift_analysis_1.m 
 
-You will need to modify lines 3 and 12 for 
+You will need to modify lines 15 and 24 for 
   1) where the two data folders (DN and UP) are and 
   2) where the individual-subject plots will be saved
 
@@ -34,4 +34,5 @@ Usage exapmles:
   4. Absolute values, from stressed words at positions 1 and 2: intShift_analysis_1(0, [1, 2])
   5. Absolute values, from only stressed words at position 2: intShift_analysis_1(0, [2])
   6. Absolute values, from unstressed words at positions 1 and 2: intShift_analysis_1(0, [1, 2], 'reverse')
-            
+  7. Show composite prosody adaptation (CPA) scores, by phase: intShift_analysis_1(1, [1, 2], 'cpa')
+  8. Show CPA scores, by phase and by epoch: intShift_analysis_1(1, [1, 2], 'cpa', 'showByEpoch')
