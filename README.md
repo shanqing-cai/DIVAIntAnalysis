@@ -36,3 +36,5 @@ Usage exapmles:
   6. Absolute values, from unstressed words at positions 1 and 2: intShift_analysis_1(0, [1, 2], 'reverse')
   7. Show composite prosody adaptation (CPA) scores, by phase: intShift_analysis_1(1, [1, 2], 'cpa')
   8. Show CPA scores, by phase and by epoch: intShift_analysis_1(1, [1, 2], 'cpa', 'showByEpoch')
+
+  9. Show CPA scores and perfor permutation test (10000 times): intShift_analysis_1(1, [1, 2], 'cpa', 'permute', 1000)
