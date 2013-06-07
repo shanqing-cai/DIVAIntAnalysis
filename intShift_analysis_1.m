@@ -389,8 +389,8 @@ if nPerm > 0
         min_t_ps = min(t_ps');
         fprintf(1, '\t== %s: ==\n', itemNames{i1});
         
-        for i2 = 2 : numel(PHASES)           
-            t_corr_p = numel(find(t_ps <= unc_ps(i2, i1))) / nPerm;
+        for i2 = 2 : numel(PHASES)
+            t_corr_p = numel(find(min_t_ps <= unc_ps(i2, i1))) / nPerm;
             fprintf(1, '\t\t%s: p = %.4f', PHASES{i2}, t_corr_p);
             if t_corr_p < P_PERMCORR_THRESH
                 fprintf(1, ' *');
