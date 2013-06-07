@@ -10,6 +10,8 @@ function intShift_analysis_1(bCD, nStresses, varargin)
 %           Reverse data between stressed (perturbed) and unstressed
 %           (unpertrubed) words, e.g., for looking at the data from the
 %           unstresed words
+% permute N: 
+%           Perform permutation test: N iterations (N > 0)
 
 %% CONFIG
 DATA_DIR = 'E:\DATA_CadLab\IntensityShift_normal';
@@ -26,6 +28,7 @@ indS_figs_dir = 'E:\speechres\cadlab\indS_figs';
 wPros = [1.0, 1.0, 1.0];    % For CPA: prosody weights: [w_intensity, w_F0 and w_dur]
 
 P_UNC_THRESH_BY_EPOCH = 0.05;
+P_PERMCORR_THRESH = 0.05;
 
 %% Input arguments / options
 bShowIndS = ~isempty(fsic(varargin, 'showIndS'));
@@ -35,6 +38,16 @@ bCPA = ~isempty(fsic(varargin, 'cpa')) || ~isempty(fsic(varargin, 'CPA'));
 
 if bCD && bReverse
     error('reverse can not be used with contrast distance');
+end
+
+nPerm = 0;
+if ~isempty(fsic(varargin, 'permute'))
+    nPerm = varargin{fsic(varargin, 'permute') + 1};
+    assert(nPerm >= 1);
+    
+    check_dir('perm_files', '-create');
+    
+    permMatFN = fullfile('perm_files', sprintf('perm_dat_%d.mat', nPerm));
 end
 
 %% Load data
@@ -192,112 +205,199 @@ end
 
 
 %% Visualization and some comparisons
-figure('Position', [50, 50, 1200, 350]);
+figure('Position', [50, 250, 1200, 350]);
 
-for j0 = 1 : 3 + bCPA
-    if j0 == 4
-        figure('Name', 'Composite prosody adaptation');
+nTot = numel(sIDs.DN) + numel(sIDs.UP);
+if nPerm > 0 && isfile(permMatFN)
+    load(permMatFN); 
+    if exist('rp_ps', 'var') && exist('rp_ts', 'var') ...
+       && size(rp_ps, 1) == nPerm && size(rp_ts, 1) == nPerm
+        bPerm = 0;
     else
-        subplot(1, 3, j0);
+        bPerm = 1;
     end
-    
-    hold on;
-        
-    if j0 == 1
-        meas = rmI_byP;
-        meas1 = mI_byP;
-        measName = 'intensity';
-    elseif j0 == 2
-        meas = rmF0_byP;
-        meas1 = mF0_byP;
-        measName = 'F0';
-    elseif j0 == 3
-        meas = rdur_byP;
-        meas1 = dur_byP;
-        measName = 'duration';
-    elseif j0 == 4
-        meas = cpa_byP;
-        meas1 = [];
-        measName = 'CPA';
-    end
-    
-    for i0 = 1 : numel(SDIRS)
-        sDir = SDIRS{i0};
-        errorbar(1 : size(meas.(sDir), 2), ...
-                 mean(meas.(sDir)), ste(meas.(sDir)), ...
-                 'o-', 'Color', colors.(sDir));
-    end
-    xlabel('Phase');
-    if bCD
-        ylabel(['Normalized ', measName, ' C.D.']);
-    else
-        ylabel(['Normalized ', measName]);
-    end
-    title(measName);
-    
-    set(gca, 'XLim', [0, nPhases + 1]);
-    set(gca, 'XTick', [1 : nPhases]);
-    set(gca, 'XTickLabel', PHASES);
-    
-    % Between-group, same-phase t-tests
-    ys = get(gca, 'YLim');
-    for i1 = 2 : numel(PHASES)
-        [h_t2, p_t2] = ttest2(meas.(SDIRS{1})(:, i1), meas.(SDIRS{2})(:, i1));        
-        text(i1 - 0.3, ys(2) - 0.05 * range(ys), sprintf('p=%.3f', p_t2));
-    end
-    text(0.1, ys(2) - 0.05 * range(ys), 'b/w group:');
-    
-    legend(SDIRS, 'Location', 'Southwest');
-    plot([0, nPhases + 1], [1, 1], '-', 'Color', [0.5, 0.5, 0.5]);
-    
-    % Within-group, between-phase t-tests
-    for i0 = 1 : numel(SDIRS)
-        sDir = SDIRS{i0};
-        ps_t = nan(1, numel(PHASES));
-        mean_meas = mean(meas.(sDir));  
-        ys = get(gca, 'YLim');
-        for i1 = 2 : numel(PHASES)
-            if j0 < 4
-                [h_foo, ps_t(i1)] = ttest(meas1.(sDir)(:, i1), meas1.(sDir)(:, 1));
-            else
-                [h_foo, ps_t(i1)] = ttest(meas.(sDir)(:, i1) - 1);
-            end
-            
-            
-            if ps_t(i1) < 0.05
-                fw = 'bold';
-            else
-                fw = 'light';
-            end
-            text(i1 + 0.07, mean_meas(i1) - 0.02 * range(ys), ...
-                 sprintf('%.3f', ps_t(i1)), ...
-                 'Color', colors.(sDir), 'FontSize', 9, 'FontWeight', fw);
-        end        
-    end
-    
-    % Within-group, RM-ANOVA with post-hoc Tukey
-    if j0 < 4
-        for i1 = 1 : numel(SDIRS)
-            sDir = SDIRS{i1};
-            rma_res = RM_ANOVA_1W(meas1.(sDir), PHASES, ...
-                                  'contrasts', {[-1, 1, 0, 0], ...
-                                                [-1, 0, 1, 0], ...
-                                                [-1, 0, 0, 1]});
-            fprintf('%s: sDir = %s: RM-ANOVA results:\n', ...
-                    measName, sDir);
-            fprintf('Omnibus: F(%d, %d) = %.3f, p = %3f\n', ...
-                    rma_res.omniRes.df_A, rma_res.omniRes.df_SA, ...
-                    rma_res.omniRes.F, rma_res.omniRes.p);
-            fprintf('Post-hoc Tukey HSD: \n');
-            fprintf('\tBase vs. Ramp: h = %d\n', ...
-                    rma_res.tukeyRes{1}.h);
-            fprintf('\tBase vs. Pert: h = %d\n', ...
-                    rma_res.tukeyRes{2}.h);
-            fprintf('\tBase vs. Post: h = %d\n', ...
-                    rma_res.tukeyRes{3}.h);
+else
+    bPerm = 1;
+end
+if bPerm == 1
+    rp_ps = nan(nPerm, 4, 3 + bCPA); % Permutations, phases, # of tests
+    rp_ts = nan(nPerm, 4, 3 + bCPA);
+end
+
+unc_ps = nan(4, 3 + bCPA); % Phases, # of tests
+
+for k0 = 0 : 1 : nPerm * bPerm
+    % --- Random permutation --- %
+    if k0 >= 1
+        if k0 == 1
+            nc = print_progress_bar(0, nPerm, sprintf('Performing permutation test (by phase)'));
         end
-        fprintf('\n');
-    end 
+        rpidx = randperm(nTot);
+    end
+    
+    for j0 = 1 : 3 + bCPA
+        if k0 == 0
+            if j0 == 4
+                figure('Name', 'Composite prosody adaptation');            
+            else           
+                subplot(1, 3, j0);
+            end
+        end
+
+        hold on;
+
+        if j0 == 1
+            meas = rmI_byP;
+            meas1 = mI_byP;
+            measName = 'intensity';
+        elseif j0 == 2
+            meas = rmF0_byP;
+            meas1 = mF0_byP;
+            measName = 'F0';
+        elseif j0 == 3
+            meas = rdur_byP;
+            meas1 = dur_byP;
+            measName = 'duration';
+        elseif j0 == 4
+            meas = cpa_byP;
+            meas1 = [];
+            measName = 'CPA';
+        end
+        
+        % --- Random permutation --- %
+        if k0 >= 1
+            meas_a = [meas.DN; meas.UP];
+            meas_a = meas_a(rpidx, :);
+            meas.DN = meas_a(1 : size(meas.DN, 1), :);
+            meas.UP = meas_a(size(meas.DN, 1) + 1 : nTot, :);
+        end
+
+        if k0 == 0
+            for i0 = 1 : numel(SDIRS)
+                sDir = SDIRS{i0};
+                errorbar(1 : size(meas.(sDir), 2), ...
+                         mean(meas.(sDir)), ste(meas.(sDir)), ...
+                         'o-', 'Color', colors.(sDir));
+            end
+            xlabel('Phase');
+            if bCD
+                ylabel(['Normalized ', measName, ' C.D.']);
+            else
+                ylabel(['Normalized ', measName]);
+            end
+            title(measName);
+
+            set(gca, 'XLim', [0, nPhases + 1]);
+            set(gca, 'XTick', [1 : nPhases]);
+            set(gca, 'XTickLabel', PHASES);
+            
+            ys = get(gca, 'YLim');
+        end
+
+        % Between-group, same-phase t-tests        
+        for i1 = 2 : numel(PHASES)
+            [~, p_t2, ~, t2_stats] = ttest2(meas.(SDIRS{1})(:, i1), meas.(SDIRS{2})(:, i1));
+            
+            if k0 == 0
+                text(i1 - 0.3, ys(2) - 0.05 * range(ys), sprintf('p=%.3f', p_t2));
+                
+                unc_ps(i1, j0) = p_t2;
+            else
+                rp_ps(k0, i1, j0) = p_t2;
+                rp_ts(k0, i1, j0) = t2_stats.tstat;
+                
+                if mod(k0, round(nPerm / 10)) == 0
+                    for k1 = 1 : nc; fprintf(1, '\b'); end 
+                    print_progress_bar(k0, nPerm, sprintf('Performing permutation test (by phase)'));
+                end
+            end
+        end
+        
+        if k0 == 0
+            text(0.1, ys(2) - 0.05 * range(ys), 'b/w group:');
+
+            legend(SDIRS, 'Location', 'Southwest');
+            plot([0, nPhases + 1], [1, 1], '-', 'Color', [0.5, 0.5, 0.5]);        
+
+            % Within-group, between-phase t-tests
+            for i0 = 1 : numel(SDIRS)
+                sDir = SDIRS{i0};
+                ps_t = nan(1, numel(PHASES));
+                mean_meas = mean(meas.(sDir));  
+                ys = get(gca, 'YLim');
+                for i1 = 2 : numel(PHASES)
+                    if j0 < 4
+                        [h_foo, ps_t(i1)] = ttest(meas1.(sDir)(:, i1), meas1.(sDir)(:, 1));
+                    else
+                        [h_foo, ps_t(i1)] = ttest(meas.(sDir)(:, i1) - 1);
+                    end
+
+                    if ps_t(i1) < 0.05
+                        fw = 'bold';
+                    else
+                        fw = 'light';
+                    end
+                    text(i1 + 0.07, mean_meas(i1) - 0.02 * range(ys), ...
+                         sprintf('%.3f', ps_t(i1)), ...
+                         'Color', colors.(sDir), 'FontSize', 9, 'FontWeight', fw);
+                end        
+            end
+
+            % Within-group, RM-ANOVA with post-hoc Tukey
+            if j0 < 4
+                for i1 = 1 : numel(SDIRS)
+                    sDir = SDIRS{i1};
+                    rma_res = RM_ANOVA_1W(meas1.(sDir), PHASES, ...
+                                          'contrasts', {[-1, 1, 0, 0], ...
+                                                        [-1, 0, 1, 0], ...
+                                                        [-1, 0, 0, 1]});
+                    fprintf('%s: sDir = %s: RM-ANOVA results:\n', ...
+                            measName, sDir);
+                    fprintf('Omnibus: F(%d, %d) = %.3f, p = %3f\n', ...
+                            rma_res.omniRes.df_A, rma_res.omniRes.df_SA, ...
+                            rma_res.omniRes.F, rma_res.omniRes.p);
+                    fprintf('Post-hoc Tukey HSD: \n');
+                    fprintf('\tBase vs. Ramp: h = %d\n', ...
+                            rma_res.tukeyRes{1}.h);
+                    fprintf('\tBase vs. Pert: h = %d\n', ...
+                            rma_res.tukeyRes{2}.h);
+                    fprintf('\tBase vs. Post: h = %d\n', ...
+                            rma_res.tukeyRes{3}.h);
+                end
+                fprintf('\n');
+            end 
+        end
+    end
+end
+
+if nPerm > 0 && bPerm
+    fprintf(1, '\n');
+    
+    save(permMatFN, 'rp_ps', 'rp_ts');
+    check_file(permMatFN);
+    fprintf(1, 'INFO: random permutation data saved to file: %s\n\n', permMatFN);
+end
+
+% --- Print permutation test results (by phase, between-group) --- %
+if nPerm > 0
+    itemNames = {'Intensity', 'F0', 'duration', 'CPA'};
+    
+    fprintf(1, '=== Permutation-corrected p-values, by-phase: ===\n');
+    
+    for i1 = 1 : 3 + bCPA        
+        t_ps = rp_ps(:, 2 : end, i1);
+        min_t_ps = min(t_ps');
+        fprintf(1, '\t== %s: ==\n', itemNames{i1});
+        
+        for i2 = 2 : numel(PHASES)           
+            t_corr_p = numel(find(t_ps <= unc_ps(i2, i1))) / nPerm;
+            fprintf(1, '\t\t%s: p < %.4f', PHASES{i2}, t_corr_p);
+            if t_corr_p < P_PERMCORR_THRESH
+                fprintf(1, ' *');
+            end
+            fprintf(1, '\n');
+        end
+    end
 end
 
 %% Visualization: by Epoch
