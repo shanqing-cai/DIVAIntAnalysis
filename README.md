@@ -37,4 +37,4 @@ Usage exapmles:
   7. Show composite prosody adaptation (CPA) scores, by phase: intShift_analysis_1(1, [1, 2], 'cpa')
   8. Show CPA scores, by phase and by epoch: intShift_analysis_1(1, [1, 2], 'cpa', 'showByEpoch')
 
-  9. Show CPA scores and perfor permutation test (10000 times): intShift_analysis_1(1, [1, 2], 'cpa', 'permute', 1000)
+  9. Show CPA scores and perfor permutation test (10000 times): intShift_analysis_1(1, [1, 2], 'cpa', 'permute', 10000)
