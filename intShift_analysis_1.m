@@ -69,7 +69,7 @@ rmF0_byE = struct;
 rmI_byE = struct;
 rdur_byE = struct;
 
-for i0 = 1 : numel(SDIRS)    
+for i0 = 1 : numel(SDIRS)
     sDir = SDIRS{i0};
     
     sIDs.(sDir) = {};
@@ -205,13 +205,19 @@ end
 
 
 %% Visualization and some comparisons
-figure('Position', [50, 250, 1200, 350]);
+byP_figHdl1 = figure('Position', [50, 250, 1200, 350]);
 
-nTot = numel(sIDs.DN) + numel(sIDs.UP);
+
+nDN = numel(sIDs.DN);
+nUP = numel(sIDs.UP);
+nTot = nDN + nUP;
+
 if nPerm > 0 && isfile(permMatFN)
     load(permMatFN); 
     if exist('rp_ps', 'var') && exist('rp_ts', 'var') ...
-       && size(rp_ps, 1) == nPerm && size(rp_ts, 1) == nPerm
+       && exist('rp_wg_cpa_ps', 'var') && exist('rp_wg_cpa_ts', 'var') ...
+       && size(rp_ps, 1) == nPerm && size(rp_ts, 1) == nPerm ...
+       && size(rp_wg_cpa_ps, 1) == nPerm && size(rp_wg_cpa_ts, 1) == nPerm
         bPerm = 0;
     else
         bPerm = 1;
@@ -222,9 +228,19 @@ end
 if bPerm == 1
     rp_ps = nan(nPerm, 4, 3 + bCPA); % Permutations, phases, # of tests
     rp_ts = nan(nPerm, 4, 3 + bCPA);
+    
+    rp_wg_cpa_ps.DN = nan(nPerm, 4); % Permutations, phases
+    rp_wg_cpa_ps.UP = nan(nPerm, 4); % Permutations, phases
+    rp_wg_cpa_ts.DN = nan(nPerm, 4);
+    rp_wg_cpa_ts.UP = nan(nPerm, 4);
 end
 
 unc_ps = nan(4, 3 + bCPA); % Phases, # of tests
+byP_hdls = nan(1, 3 + bCPA);
+
+unc_wg_cpa_ps.DN = nan(4, 1); % Phases
+unc_wg_cpa_ps.UP = nan(4, 1); % Phases
+
 
 for k0 = 0 : 1 : nPerm * bPerm
     % --- Random permutation --- %
@@ -233,14 +249,18 @@ for k0 = 0 : 1 : nPerm * bPerm
             nc = print_progress_bar(0, nPerm, sprintf('Performing permutation test (by phase)'));
         end
         rpidx = randperm(nTot);
+        
+        % -- Sign reassignment for the two groups -- %
+        sgn.DN = (rand(nDN, 1) > 0.5) * 2 - 1;
+        sgn.UP = (rand(nUP, 1) > 0.5) * 2 - 1;
     end
     
     for j0 = 1 : 3 + bCPA
         if k0 == 0
             if j0 == 4
-                figure('Name', 'Composite prosody adaptation');            
-            else           
-                subplot(1, 3, j0);
+                byP_hdls(j0) = figure('Name', 'Composite prosody adaptation');
+            else
+                byP_hdls(j0) = subplot(1, 3, j0);
             end
         end
 
@@ -299,7 +319,13 @@ for k0 = 0 : 1 : nPerm * bPerm
             [~, p_t2, ~, t2_stats] = ttest2(meas.(SDIRS{1})(:, i1), meas.(SDIRS{2})(:, i1));
             
             if k0 == 0
-                text(i1 - 0.3, ys(2) - 0.05 * range(ys), sprintf('p=%.3f', p_t2));
+                if p_t2 < P_UNC_THRESH_BY_EPOCH
+                    fw = 'bold';
+                else
+                    fw = 'normal';
+                end
+                
+                text(i1 - 0.3, ys(2) - 0.05 * range(ys), sprintf('p=%.3f', p_t2), 'FontWeight', fw);
                 
                 unc_ps(i1, j0) = p_t2;
             else
@@ -327,9 +353,10 @@ for k0 = 0 : 1 : nPerm * bPerm
                 ys = get(gca, 'YLim');
                 for i1 = 2 : numel(PHASES)
                     if j0 < 4
-                        [h_foo, ps_t(i1)] = ttest(meas1.(sDir)(:, i1), meas1.(sDir)(:, 1));
+                        [~, ps_t(i1)] = ttest(meas1.(sDir)(:, i1), meas1.(sDir)(:, 1));
                     else
-                        [h_foo, ps_t(i1)] = ttest(meas.(sDir)(:, i1) - 1);
+                        [~, ps_t(i1)] = ttest(meas.(sDir)(:, i1) - 1);
+                        unc_wg_cpa_ps.(sDir)(i1) = ps_t(i1);
                     end
 
                     if ps_t(i1) < 0.05
@@ -366,6 +393,22 @@ for k0 = 0 : 1 : nPerm * bPerm
                 end
                 fprintf('\n');
             end 
+        else
+            % -- Within-group permutation by sign reassignment -- %
+            if j0 == 4
+                for i0 = 1 : numel(SDIRS)
+                    sDir = SDIRS{i0};
+                    for i1 = 2 : numel(PHASES)                        
+    %                         sg_meas = meas1.(sDir)(:, i1) .* sgn.(sDir);                    
+                        sg_meas = (meas.(sDir)(:, i1) - 1) .* sgn.(sDir);                    
+
+                        [~, t_p, ~, t_stats] = ttest(sg_meas);
+                        rp_wg_cpa_ps.(sDir)(k0, i1) = t_p;
+                        rp_wg_cpa_ts.(sDir)(k0, i1) = t_stats.tstat;
+                    end
+                end
+            end
+            
         end
     end
 end
@@ -391,11 +434,52 @@ if nPerm > 0
         
         for i2 = 2 : numel(PHASES)
             t_corr_p = numel(find(min_t_ps <= unc_ps(i2, i1))) / nPerm;
+            
+            if i1 <= 3
+            	set(0, 'CurrentFigure', byP_figHdl1);
+                set(gcf, 'CurrentAxes', byP_hdls(i1));
+            else
+                set(0, 'CurrentFigure', byP_hdls(i1));
+            end
+            ys = get(gca, 'YLim');
+            
+            if t_corr_p < P_PERMCORR_THRESH
+                fw = 'bold';
+            else
+                fw = 'normal';
+            end
+            
+            text(i2 - 0.3, ys(2) - 0.10 * range(ys), sprintf('p=%.3f', t_corr_p), ...
+                 'FontWeight', fw);
+            
             fprintf(1, '\t\t%s: p = %.4f', PHASES{i2}, t_corr_p);
             if t_corr_p < P_PERMCORR_THRESH
                 fprintf(1, ' *');
             end
             fprintf(1, '\n');
+            
+            if i1 == 3 + bCPA
+                for i3 = 1 : numel(SDIRS)
+                    sDir = SDIRS{i3};
+                    t_ps_wg = rp_wg_cpa_ps.(sDir)(:, 2 : end);
+                    min_t_ps_wg = min(t_ps_wg');                
+                
+                    t_corr_p_wg = numel(find(min_t_ps_wg <= unc_wg_cpa_ps.(sDir)(i2))) / nPerm;
+                    
+                    mean_meas = mean(cpa_byP.(sDir));
+                    if t_corr_p_wg < P_PERMCORR_THRESH
+                        fw = 'bold';
+                    else
+                        fw = 'normal';
+                    end
+                        
+                    text(i2 + 0.07, mean_meas(i2) - 0.05 * range(ys), ...                       
+                         sprintf('%.3f', t_corr_p_wg), ...
+                         'Color', colors.(sDir), 'FontSize', 9, 'FontWeight', fw);
+                end
+                
+            end
+            
         end
     end
 end
