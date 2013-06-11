@@ -38,3 +38,8 @@ Usage exapmles:
   8. Show CPA scores, by phase and by epoch: intShift_analysis_1(1, [1, 2], 'cpa', 'showByEpoch')
 
   9. Show CPA scores and perfor permutation test (10000 times): intShift_analysis_1(1, [1, 2], 'cpa', 'permute', 10000)
+  
+  10. Analyze the correlation between the adaptation measures and the pertContr:
+	intShift_analysis_1(1, [1, 2], 'cpa', 'corrPert')
+	
+	# Note: you may need to revise the "L3_DATA_DIR" variable to set the correct path to the level-3 (in Kevin's parlance) csv files.

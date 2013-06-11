@@ -12,9 +12,14 @@ function intShift_analysis_1(bCD, nStresses, varargin)
 %           unstresed words
 % permute N: 
 %           Perform permutation test: N iterations (N > 0)
+% corrPert:
+%           Correlation with perturbation 
+% loadCache:
+%           Load cached group-level data (may not work under every case)  
 
 %% CONFIG
 DATA_DIR = 'E:\DATA_CadLab\IntensityShift_normal';
+L3_DATA_DIR = 'E:\DATA_CadLab\IntensityShift_normal\L3DATA';
 % DATA_DIR = 'E:\DATA_CadLab\IntensityShift_normal\July2012_bak';
 
 SDIRS = {'DN', 'UP'};
@@ -50,113 +55,169 @@ if ~isempty(fsic(varargin, 'permute'))
     permMatFN = fullfile('perm_files', sprintf('perm_dat_%d.mat', nPerm));
 end
 
+bCorrPert = 0;
+if ~isempty(fsic(varargin, 'corrPert'))
+    bCorrPert = 1;
+    check_dir(L3_DATA_DIR);
+end
+
+bLoadCache = 0;
+if ~isempty(fsic(varargin, 'loadCache'))
+    bLoadCache = 1;
+end
+
 %% Load data
+cacheDataFN = sprintf('%s_cache_bCD%d.mat', mfilename, bCD);
+if bLoadCache
+    check_file(cacheDataFN);
+    load(cacheDataFN);
+    fprintf(1, 'INFO: Loaded cached group-level data from file: %s\n', cacheDataFN);
+else
+    sIDs = struct;
+    mF0_byP = struct; % Mean F0, by phase
+    mI_byP = struct; % Mean intensity, by phase
+    dur_byP = struct; % duration, by phsae
 
-sIDs = struct;
-mF0_byP = struct; % Mean F0, by phase
-mI_byP = struct; % Mean intensity, by phase
-dur_byP = struct; % duration, by phsae
+    rmF0_byP = struct; % Relative mean F0, by phase
+    rmI_byP = struct; % Relative mean intensity, by phase
+    rdur_byP = struct; % Relative duration, by phase
 
-rmF0_byP = struct; % Relative mean F0, by phase
-rmI_byP = struct; % Relative mean intensity, by phase
-rdur_byP = struct; % Relative duration, by phase
+    mF0_byE = struct; % Mean F0, by phase
+    mI_byE = struct; % Mean intensity, by phase
+    dur_byE = struct; % duration, by phsae
 
-mF0_byE = struct; % Mean F0, by phase
-mI_byE = struct; % Mean intensity, by phase
-dur_byE = struct; % duration, by phsae
+    rmF0_byE = struct;
+    rmI_byE = struct;
+    rdur_byE = struct;
 
-rmF0_byE = struct;
-rmI_byE = struct;
-rdur_byE = struct;
+    if bCorrPert
+        pertContr_mn = struct;
+    end
 
-for i0 = 1 : numel(SDIRS)
-    sDir = SDIRS{i0};
-    
-    sIDs.(sDir) = {};
-    mF0_byP.(sDir) = nan(0, 4); % Four phases: Base, Ramp, Pert and Post
-    mI_byP.(sDir) = nan(0, 4);
-    dur_byP.(sDir) = nan(0, 4);
-    
-    rmF0_byP.(sDir) = nan(0, 4); % Four phases: Base, Ramp, Pert and Post
-    rmI_byP.(sDir) = nan(0, 4);
-    rdur_byP.(sDir) = nan(0, 4);
-    
-    mF0_byE.(sDir) = nan(0, NEPOCHS); % Four phases: Base, Ramp, Pert and Post
-    mI_byE.(sDir) = nan(0, NEPOCHS);
-    dur_byE.(sDir) = nan(0, NEPOCHS);
-    
-    rmF0_byE.(sDir) = nan(0, NEPOCHS);
-    rmI_byE.(sDir) = nan(0, NEPOCHS);
-    rdur_byE.(sDir) = nan(0, NEPOCHS);
-    
-    dDir = fullfile(DATA_DIR, sDir);
-    
-    stat_fns = dir(fullfile(dDir, '*.stat'));
-    
-    for i1 = 1 : numel(stat_fns)
-        sID = strrep(stat_fns(i1).name, '.stat', '');
-        sIDs.(sDir){end + 1} = sID;
-        fprintf('Loading data from subject %s: %s...\n', sDir, sID);
-        
-        if bReverse
-            revWord = 'reverse';
-        else
-            revWord = 'no_reverse';
+    for i0 = 1 : numel(SDIRS)
+        sDir = SDIRS{i0};
+
+        sIDs.(sDir) = {};
+        mF0_byP.(sDir) = nan(0, 4); % Four phases: Base, Ramp, Pert and Post
+        mI_byP.(sDir) = nan(0, 4);
+        dur_byP.(sDir) = nan(0, 4);
+
+        rmF0_byP.(sDir) = nan(0, 4); % Four phases: Base, Ramp, Pert and Post
+        rmI_byP.(sDir) = nan(0, 4);
+        rdur_byP.(sDir) = nan(0, 4);
+
+        mF0_byE.(sDir) = nan(0, NEPOCHS); % Four phases: Base, Ramp, Pert and Post
+        mI_byE.(sDir) = nan(0, NEPOCHS);
+        dur_byE.(sDir) = nan(0, NEPOCHS);
+
+        rmF0_byE.(sDir) = nan(0, NEPOCHS);
+        rmI_byE.(sDir) = nan(0, NEPOCHS);
+        rdur_byE.(sDir) = nan(0, NEPOCHS);
+
+        if bCorrPert
+            pertContr_mn.(sDir) = nan(0, 1);
         end
-        
-        sData = intShift_readSubjData(fullfile(dDir, stat_fns(i1).name), ...
-                                      bCD, 'nStresses', nStresses, revWord);
-        
-        idx_base = strmatch('Base', sData.phase, 'exact');
-        idx_ramp = strmatch('Ramp', sData.phase, 'exact');
-        idx_pert = strmatch('Pert', sData.phase, 'exact');
-        idx_post = strmatch('Post', sData.phase, 'exact');
-        
-        % By-phase data
-        p_mF0 = [nanmean(sData.mF0(idx_base)), ...
-                 nanmean(sData.mF0(idx_ramp)), ...
-                 nanmean(sData.mF0(idx_pert)), ...
-                 nanmean(sData.mF0(idx_post))];
-        p_mI = [nanmean(sData.mI(idx_base)), ...
-                nanmean(sData.mI(idx_ramp)), ...
-                nanmean(sData.mI(idx_pert)), ...
-                nanmean(sData.mI(idx_post))];
-        p_dur = [nanmean(sData.dur(idx_base)), ...
-                nanmean(sData.dur(idx_ramp)), ...
-                nanmean(sData.dur(idx_pert)), ...
-                nanmean(sData.dur(idx_post))];
-        
-        mF0_byP.(sDir) = [mF0_byP.(sDir); p_mF0];
-        mI_byP.(sDir) = [mI_byP.(sDir); p_mI];
-        dur_byP.(sDir) = [dur_byP.(sDir); p_dur];
-        
-        % Compute relative changes from the Base phase (by phase)
-        rmF0_byP.(sDir) = [rmF0_byP.(sDir); p_mF0 / p_mF0(1)];
-        rmI_byP.(sDir) = [rmI_byP.(sDir); p_mI / p_mI(1)];
-        rdur_byP.(sDir) = [rdur_byP.(sDir); p_dur / p_dur(1)];
-        
-        % By-epoch data
-        e_mF0 = nan(1, NEPOCHS);
-        e_mI = nan(1, NEPOCHS);
-        e_dur = nan(1, NEPOCHS);
-        for i2 = 1 : NEPOCHS
-            idxe = find(sData.epoch == i2);
-            e_mF0(i2) = nanmean(sData.mF0(idxe));
-            e_mI(i2) = nanmean(sData.mI(idxe));
-            e_dur(i2) = nanmean(sData.dur(idxe));
+
+        dDir = fullfile(DATA_DIR, sDir);
+
+        stat_fns = dir(fullfile(dDir, '*.stat'));
+
+        for i1 = 1 : numel(stat_fns)
+            sID = strrep(stat_fns(i1).name, '.stat', '');
+            sIDs.(sDir){end + 1} = sID;
+            fprintf('Loading data from subject %s: %s...\n', sDir, sID);
+
+            if bReverse
+                revWord = 'reverse';
+            else
+                revWord = 'no_reverse';
+            end
+
+            sData = intShift_readSubjData(fullfile(dDir, stat_fns(i1).name), ...
+                                          bCD, 'nStresses', nStresses, revWord);
+
+            if bCorrPert
+                t_sID = strrep(stat_fns(i1).name, '.stat', '');
+                t_L3DatFN = fullfile(L3_DATA_DIR, ...
+                                     sprintf('%s (%s).csv', t_sID, sDir));
+                if ~isfile(t_L3DatFN)
+                    fprintf(2, 'WARNING: bCorrPert: Failed to find L3 data file for subject %s: "%s"\n', ...
+                            t_sID, t_L3DatFN);
+
+                    pertContr_mn.(sDir)(end + 1) = NaN;
+                else
+                    fprintf(1, 'INFO: bCorrPert: Loading L3 data for subject %s from file "%s"\n', ...
+                            t_sID, t_L3DatFN);
+
+                    dl3 = csvread(t_L3DatFN);
+                    assert(size(dl3, 2) == 4);
+                    pertContr_mn.(sDir)(end + 1) = nanmean(dl3(find(dl3(:, 4) == 3), 2));
+                end
+            end
+
+            idx_base = strmatch('Base', sData.phase, 'exact');
+            idx_ramp = strmatch('Ramp', sData.phase, 'exact');
+            idx_pert = strmatch('Pert', sData.phase, 'exact');
+            idx_post = strmatch('Post', sData.phase, 'exact');
+
+            % By-phase data
+            p_mF0 = [nanmean(sData.mF0(idx_base)), ...
+                     nanmean(sData.mF0(idx_ramp)), ...
+                     nanmean(sData.mF0(idx_pert)), ...
+                     nanmean(sData.mF0(idx_post))];
+            p_mI = [nanmean(sData.mI(idx_base)), ...
+                    nanmean(sData.mI(idx_ramp)), ...
+                    nanmean(sData.mI(idx_pert)), ...
+                    nanmean(sData.mI(idx_post))];
+            p_dur = [nanmean(sData.dur(idx_base)), ...
+                    nanmean(sData.dur(idx_ramp)), ...
+                    nanmean(sData.dur(idx_pert)), ...
+                    nanmean(sData.dur(idx_post))];
+
+            mF0_byP.(sDir) = [mF0_byP.(sDir); p_mF0];
+            mI_byP.(sDir) = [mI_byP.(sDir); p_mI];
+            dur_byP.(sDir) = [dur_byP.(sDir); p_dur];
+
+            % Compute relative changes from the Base phase (by phase)
+            rmF0_byP.(sDir) = [rmF0_byP.(sDir); p_mF0 / p_mF0(1)];
+            rmI_byP.(sDir) = [rmI_byP.(sDir); p_mI / p_mI(1)];
+            rdur_byP.(sDir) = [rdur_byP.(sDir); p_dur / p_dur(1)];
+
+            % By-epoch data
+            e_mF0 = nan(1, NEPOCHS);
+            e_mI = nan(1, NEPOCHS);
+            e_dur = nan(1, NEPOCHS);
+            for i2 = 1 : NEPOCHS
+                idxe = find(sData.epoch == i2);
+                e_mF0(i2) = nanmean(sData.mF0(idxe));
+                e_mI(i2) = nanmean(sData.mI(idxe));
+                e_dur(i2) = nanmean(sData.dur(idxe));
+            end
+
+            mF0_byE.(sDir) = [mF0_byE.(sDir); e_mF0];
+            mI_byE.(sDir) = [mI_byE.(sDir); e_mI];
+            dur_byE.(sDir) = [dur_byE.(sDir); e_dur];
+
+            % Compute relative change from the base phase (by epoch)
+            rmF0_byE.(sDir) = [rmF0_byE.(sDir); e_mF0 / p_mF0(1)];
+            rmI_byE.(sDir) = [rmI_byE.(sDir); e_mI / p_mI(1)];
+            rdur_byE.(sDir) = [rdur_byE.(sDir); e_dur / p_dur(1)];
         end
-        
-        mF0_byE.(sDir) = [mF0_byE.(sDir); e_mF0];
-        mI_byE.(sDir) = [mI_byE.(sDir); e_mI];
-        dur_byE.(sDir) = [dur_byE.(sDir); e_dur];
-        
-        % Compute relative change from the base phase (by epoch)
-        rmF0_byE.(sDir) = [rmF0_byE.(sDir); e_mF0 / p_mF0(1)];
-        rmI_byE.(sDir) = [rmI_byE.(sDir); e_mI / p_mI(1)];
-        rdur_byE.(sDir) = [rdur_byE.(sDir); e_dur / p_dur(1)];
     end
 end
 
+%% Save cache file
+if ~bLoadCache
+    save(cacheDataFN, 'sIDs', 'mF0_byP', 'mI_byP', 'dur_byP', ...
+         'rmF0_byP', 'rmI_byP', 'rdur_byP', ...
+         'mF0_byE', 'mI_byE', 'dur_byE', ...
+         'rmF0_byE', 'rmI_byE', 'rdur_byE');
+    check_file(cacheDataFN);
+    if bCorrPert
+        save(cacheDataFN, 'pertContr_mn', '-append');
+    end
+end
+    
 %% Optional:  Calculate the composite prosody adaptation (CPA) score
 if bCPA
     cpa_byP = struct;
@@ -168,6 +229,39 @@ if bCPA
         cpa_byE.(sDir) = (rmI_byE.(sDir) * wPros(1) + rmF0_byE.(sDir) * wPros(2) + rdur_byE.(sDir) * wPros(3)) / sum(wPros);
 
     end
+end
+
+%% Optional: corrPert visualization
+if bCorrPert
+    figure('Name', 'L3 analysis: pertContr');
+    hold on;
+    for i1 = 1 : numel(SDIRS)
+        sDir = SDIRS{i1};
+        bar(i1, mean(pertContr_mn.(sDir)), ...
+            'EdgeColor', [0, 0, 0], 'FaceColor', colors.(sDir));
+        plot([i1, i1], mean(pertContr_mn.(sDir)) + [-1, 1] * ste(pertContr_mn.(sDir)), 'k-');
+        
+        
+    end
+    set(gca, 'XLim', [0, 3]);
+    
+    xs = get(gca, 'XLim'); ys = get(gca, 'YLim');
+    for i1 = 1 : numel(SDIRS)
+        sDir = SDIRS{i1};
+        [~, p, ~, t_stats] = ttest(pertContr_mn.(sDir));
+        text(xs(1) + 0.4 * range(xs), ys(2) - 0.06 * i1 * range(ys), ...
+             sprintf('Within-group (%s): t = %.3f; p = %f', sDir, t_stats.tstat, p), ...
+             'Color', colors.(sDir));
+    end
+    
+    [~, p, ~, t_stats] = ttest2(pertContr_mn.(SDIRS{1}), pertContr_mn.(SDIRS{2}));
+    
+    ylabel('pertContr (dB; mean\pm1 SEM)');
+    set(gca, 'XTick', [1, 2], 'XTickLabel', SDIRS);
+    
+    
+    text(xs(1) + 0.4 * range(xs), ys(2) - 0.06 * 3 * range(ys), ...
+         sprintf('Between-group: t = %.3f; p = %f', t_stats.tstat, p));
 end
 
 %% 
@@ -459,7 +553,7 @@ if nPerm > 0
             fprintf(1, '\n');
             
             if i1 == 3 + bCPA
-                for i3 = 1 : numel(SDIRS)
+                    for i3 = 1 : numel(SDIRS)
                     sDir = SDIRS{i3};
                     t_ps_wg = rp_wg_cpa_ps.(sDir)(:, 2 : end);
                     min_t_ps_wg = min(t_ps_wg');                
@@ -481,6 +575,64 @@ if nPerm > 0
             end
             
         end
+    end
+end
+
+%% CPA - pertContr correlation
+if bCPA && bCorrPert
+    for i1 = 1 : 4
+        if i1 == 1
+            meas = rmI_byP;
+            measName = 'Normalized intensity';
+        elseif i1 == 2
+            meas = rmF0_byP;
+            measName = 'Normalized mean F0';
+        elseif i1 == 3
+            meas = rdur_byP;
+            measName = 'Normalized duration';
+        else
+            meas = cpa_byP;
+            measName = 'CPA';
+        end
+            
+        figure('Name', sprintf('%s - pertContr correlation', measName));
+        hold on;
+
+        for i1 = 1 : numel(SDIRS)
+            sDir = SDIRS{i1};
+
+            plot(pertContr_mn.(sDir), meas.(sDir)(:, 3), 'o', ...
+                 'Color', colors.(sDir));
+        end
+
+        xs = get(gca, 'XLim'); ys = get(gca, 'YLim'); 
+        for i1 = 1 : numel(SDIRS) + 1        
+            if i1 <= 2
+                sDir = SDIRS{i1};
+                [k, r2, p] = lincorr(pertContr_mn.(sDir), meas.(sDir)(:, 3));
+
+                dClr = colors.(sDir);
+                dDir = sDir;
+            else
+                t_x = [pertContr_mn.(SDIRS{1})'; pertContr_mn.(SDIRS{2})'];
+                t_y = [meas.(SDIRS{1})(:, 3); meas.(SDIRS{2})(:, 3)];
+                [k, r2, p] = lincorr(t_x, t_y);
+                dClr = [0, 0, 0];
+                dDir = 'BOTH'
+            end
+
+            plot(xs, k(1) + k(2) * xs, '-', 'Color', dClr);
+
+            r = sqrt(r2) * sign(k(2));
+
+            text(xs(1) + 0.5 * range(xs), ys(1) + 0.06 * (4 - i1) * range(ys), ...
+                 sprintf('%s: r = %f; p = %f', dDir, r, p), ...
+                 'Color', dClr);
+
+        end
+
+        xlabel('Mean-pert pertContr (dB)');
+        ylabel('CPA');
     end
 end
 
