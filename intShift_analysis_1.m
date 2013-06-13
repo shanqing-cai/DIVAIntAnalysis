@@ -18,6 +18,8 @@ function intShift_analysis_1(bCD, nStresses, varargin)
 %           Load cached group-level data (may not work under every case)  
 % rs: 
 %           Use ranksum test, rather than the default t-test
+% noUnc:    
+%           Do not show uncorrected p-values
 
 %% CONFIG
 DATA_DIR = 'E:\DATA_CadLab\IntensityShift_normal';
@@ -79,6 +81,7 @@ if ~isempty(fsic(varargin, 'loadCache'))
     bLoadCache = 1;
 end
 
+bNoUnc = ~isempty(fsic(varargin, 'noUnc'));
 
 %% Load data
 cacheDataFN = sprintf('%s_cache_bCD%d.mat', mfilename, bCD);
@@ -332,7 +335,8 @@ if nPerm > 0 && isfile(permMatFN)
     if exist('rp_ps', 'var') && exist('rp_ts', 'var') ...
        && exist('rp_wg_cpa_ps', 'var') && exist('rp_wg_cpa_ts', 'var') ...
        && size(rp_ps, 1) == nPerm && size(rp_ts, 1) == nPerm ...
-       && size(rp_wg_cpa_ps, 1) == nPerm && size(rp_wg_cpa_ts, 1) == nPerm
+       && size(rp_wg_cpa_ps.DN, 1) == nPerm && size(rp_wg_cpa_ts.DN, 1) == nPerm ...
+       && size(rp_wg_cpa_ps.UP, 1) == nPerm && size(rp_wg_cpa_ts.UP, 1) == nPerm
         bPerm = 0;
     else
         bPerm = 1;
@@ -344,10 +348,10 @@ if bPerm == 1
     rp_ps = nan(nPerm, 4, 3 + bCPA); % Permutations, phases, # of tests
     rp_ts = nan(nPerm, 4, 3 + bCPA);
     
-    rp_wg_cpa_ps.DN = nan(nPerm, 4); % Permutations, phases
-    rp_wg_cpa_ps.UP = nan(nPerm, 4); % Permutations, phases
-    rp_wg_cpa_ts.DN = nan(nPerm, 4);
-    rp_wg_cpa_ts.UP = nan(nPerm, 4);
+    rp_wg_cpa_ps.DN = nan(nPerm, 4, 3 + bCPA); % Permutations, phases, # of tests
+    rp_wg_cpa_ps.UP = nan(nPerm, 4, 3 + bCPA); % Permutations, phases
+    rp_wg_cpa_ts.DN = nan(nPerm, 4, 3 + bCPA);
+    rp_wg_cpa_ts.UP = nan(nPerm, 4, 3 + bCPA);
 end
 
 unc_ps = nan(4, 3 + bCPA); % Phases, # of tests
@@ -356,6 +360,9 @@ byP_hdls = nan(1, 3 + bCPA);
 unc_wg_cpa_ps.DN = nan(4, 1); % Phases
 unc_wg_cpa_ps.UP = nan(4, 1); % Phases
 
+txt_hdls_wg.DN = nan(4, 3 + bCPA); % Phases, # of tests
+txt_hdls_wg.UP = nan(4, 3 + bCPA); % Phases, # of tests
+txt_hdls_bg = nan(4, 3 + bCPA);
 
 for k0 = 0 : 1 : nPerm * bPerm
     % --- Random permutation --- %
@@ -462,7 +469,7 @@ for k0 = 0 : 1 : nPerm * bPerm
                     fw = 'normal';
                 end
                 
-                text(i1 - 0.3, ys(2) - 0.05 * range(ys), sprintf('%.3f', p_t2), 'FontWeight', fw, 'FontSize', fontSize);
+                txt_hdls_bg(i1, j0) = text(i1 - 0.3, ys(2) - 0.05 * range(ys), sprintf('%.3f', p_t2), 'FontWeight', fw, 'FontSize', fontSize);
                 
                 unc_ps(i1, j0) = p_t2;
             else
@@ -516,9 +523,10 @@ for k0 = 0 : 1 : nPerm * bPerm
                     else
                         fw = 'light';
                     end
-                    text(i1 + 0.07, mean_meas(i1) - 0.02 * range(ys), ...
+                    txt_hdls_wg.(sDir)(i1, j0) = ...
+                         text(i1 + 0.07, mean_meas(i1) - 0.02 * range(ys), ...
                          sprintf('%.3f', ps_t(i1)), ...
-                         'Color', colors.(sDir), 'FontSize', fontSize, 'FontWeight', fw);
+                         'Color', colors.(sDir), 'FontSize', fontSize - 1, 'FontWeight', fw);
                 end        
             end
 
@@ -547,7 +555,7 @@ for k0 = 0 : 1 : nPerm * bPerm
             end 
         else
             % -- Within-group permutation by sign reassignment -- %
-            if j0 == 4
+%             if j0 == 4
                 for i0 = 1 : numel(SDIRS)
                     sDir = SDIRS{i0};
                     for i1 = 2 : numel(PHASES)                        
@@ -556,17 +564,17 @@ for k0 = 0 : 1 : nPerm * bPerm
 
                         if ~bRS
                             [~, t_p, ~, t_stats] = ttest(sg_meas);
-                            rp_wg_cpa_ps.(sDir)(k0, i1) = t_p;
-                            rp_wg_cpa_ts.(sDir)(k0, i1) = t_stats.tstat;
+                            rp_wg_cpa_ps.(sDir)(k0, i1, j0) = t_p;
+                            rp_wg_cpa_ts.(sDir)(k0, i1, j0) = t_stats.tstat;
                         else
-                            [t_p, ~, t_stats] = signrank(sg_meas, 1);
-                            rp_wg_cpa_ps.(sDir)(k0, i1) = t_p;
-                            rp_wg_cpa_ts.(sDir)(k0, i1) = t_stats.signedrank;
+                            [t_p, ~, t_stats] = signrank(sg_meas);
+                            rp_wg_cpa_ps.(sDir)(k0, i1, j0) = t_p;
+                            rp_wg_cpa_ts.(sDir)(k0, i1, j0) = t_stats.signedrank;
                         end
                         
                     end
                 end
-            end
+%             end
             
         end
     end
@@ -588,6 +596,9 @@ if nPerm > 0
     
     for i1 = 1 : 3 + bCPA        
         t_ps = rp_ps(:, 2 : end, i1);
+%         t_ps = [rp_wg_cpa_ps.(SDIRS{1})(:, 2 : end, i1), ...
+%                 rp_wg_cpa_ps.(SDIRS{2})(:, 2 : end, i1), ...
+%                 rp_ps(:, 2 : end, i1)];
         min_t_ps = min(t_ps');
         fprintf(1, '\t== %s: ==\n', itemNames{i1});
         
@@ -608,7 +619,13 @@ if nPerm > 0
                 fw = 'normal';
             end
             
-            text(i2 - 0.3, ys(2) - 0.10 * range(ys), sprintf('%.3f', t_corr_p), ...
+            if ~bNoUnc
+                yr = 0.10;
+            else
+                delete(txt_hdls_bg(i2, i1));
+                yr = 0.06;
+            end
+            text(i2 - 0.3, ys(2) - yr * range(ys), sprintf('%.3f', t_corr_p), ...
                  'FontSize', fontSize, 'FontWeight', fw);
             
             fprintf(1, '\t\t%s: p = %.4f', PHASES{i2}, t_corr_p);
@@ -617,27 +634,43 @@ if nPerm > 0
             end
             fprintf(1, '\n');
             
-            if i1 == 3 + bCPA
-                    for i3 = 1 : numel(SDIRS)
-                    sDir = SDIRS{i3};
-                    t_ps_wg = rp_wg_cpa_ps.(sDir)(:, 2 : end);
-                    min_t_ps_wg = min(t_ps_wg');                
-                
-                    t_corr_p_wg = numel(find(min_t_ps_wg <= unc_wg_cpa_ps.(sDir)(i2))) / nPerm;
-                    
+%             if i1 == 3 + bCPA
+            for i3 = 1 : numel(SDIRS)
+                sDir = SDIRS{i3};
+%                 t_ps_wg = rp_wg_cpa_ps.(sDir)(:, 2 : end, i1);
+                t_ps_wg = [rp_wg_cpa_ps.(SDIRS{1})(:, 2 : end, i1), ...
+                           rp_wg_cpa_ps.(SDIRS{2})(:, 2 : end, i1)];
+                min_t_ps_wg = min(t_ps_wg, [], 2);                
+
+                t_corr_p_wg = numel(find(min_t_ps_wg <= unc_wg_cpa_ps.(sDir)(i2))) / nPerm;
+    
+                if i1 == 1
+                    mean_meas = mean(rmI_byP.(sDir));
+                elseif i1 == 2
+                    mean_meas = mean(rmF0_byP.(sDir));
+                elseif i1 == 3
+                    mean_meas = mean(rdur_byP.(sDir));
+                elseif i1 == 4
                     mean_meas = mean(cpa_byP.(sDir));
-                    if t_corr_p_wg < P_PERMCORR_THRESH
-                        fw = 'bold';
-                    else
-                        fw = 'normal';
-                    end
-                        
-                    text(i2 + 0.07, mean_meas(i2) - 0.05 * range(ys), ...                       
-                         sprintf('%.3f', t_corr_p_wg), ...
-                         'Color', colors.(sDir), 'FontSize', fontSize, 'FontWeight', fw);
                 end
-                
+                if t_corr_p_wg < P_PERMCORR_THRESH
+                    fw = 'bold';
+                else
+                    fw = 'normal';
+                end
+
+                if ~bNoUnc
+                    yr = 0.05;
+                else
+                    delete(txt_hdls_wg.(sDir)(i2, i1));
+                    yr = 0.02;
+                end
+                text(i2 + 0.07, mean_meas(i2) - yr * range(ys), ...                       
+                     sprintf('%.3f', t_corr_p_wg), ...
+                     'Color', colors.(sDir), 'FontSize', fontSize - 1, 'FontWeight', fw);
             end
+                
+%             end
             
         end
     end
