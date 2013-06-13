@@ -16,6 +16,8 @@ function intShift_analysis_1(bCD, nStresses, varargin)
 %           Correlation with perturbation 
 % loadCache:
 %           Load cached group-level data (may not work under every case)  
+% rs: 
+%           Use ranksum test, rather than the default t-test
 
 %% CONFIG
 DATA_DIR = 'E:\DATA_CadLab\IntensityShift_normal';
@@ -35,6 +37,8 @@ wPros = [1.0, 1.0, 1.0];    % For CPA: prosody weights: [w_intensity, w_F0 and w
 P_UNC_THRESH_BY_EPOCH = 0.05;
 P_PERMCORR_THRESH = 0.05;
 
+fontSize = 11;
+
 %% Input arguments / options
 bShowIndS = ~isempty(fsic(varargin, 'showIndS'));
 bShowByEpoch = ~isempty(fsic(varargin, 'showByEpoch'));
@@ -45,14 +49,23 @@ if bCD && bReverse
     error('reverse can not be used with contrast distance');
 end
 
+bRS = 0;
+if ~isempty(fsic(varargin, 'rs'))
+    bRS = 1;
+end
+
 nPerm = 0;
 if ~isempty(fsic(varargin, 'permute'))
     nPerm = varargin{fsic(varargin, 'permute') + 1};
     assert(nPerm >= 1);
     
     check_dir('perm_files', '-create');
-    
+        
     permMatFN = fullfile('perm_files', sprintf('perm_dat_%d.mat', nPerm));
+    if bRS 
+        permMatFN = strrep(permMatFN, '.mat', '_rs.mat');
+    end
+        
 end
 
 bCorrPert = 0;
@@ -65,6 +78,7 @@ bLoadCache = 0;
 if ~isempty(fsic(varargin, 'loadCache'))
     bLoadCache = 1;
 end
+
 
 %% Load data
 cacheDataFN = sprintf('%s_cache_bCD%d.mat', mfilename, bCD);
@@ -248,10 +262,15 @@ if bCorrPert
     xs = get(gca, 'XLim'); ys = get(gca, 'YLim');
     for i1 = 1 : numel(SDIRS)
         sDir = SDIRS{i1};
-        [~, p, ~, t_stats] = ttest(pertContr_mn.(sDir));
+        
+%         if ~bRS
+            [~, p, ~, t_stats] = ttest(pertContr_mn.(sDir));
+%         else
+            % TODO 
+%         end
         text(xs(1) + 0.4 * range(xs), ys(2) - 0.06 * i1 * range(ys), ...
              sprintf('Within-group (%s): t = %.3f; p = %f', sDir, t_stats.tstat, p), ...
-             'Color', colors.(sDir));
+             'Color', colors.(sDir), 'FontSize', fontSize);
     end
     
     [~, p, ~, t_stats] = ttest2(pertContr_mn.(SDIRS{1}), pertContr_mn.(SDIRS{2}));
@@ -261,7 +280,8 @@ if bCorrPert
     
     
     text(xs(1) + 0.4 * range(xs), ys(2) - 0.06 * 3 * range(ys), ...
-         sprintf('Between-group: t = %.3f; p = %f', t_stats.tstat, p));
+         sprintf('Between-group: t = %.3f; p = %f', t_stats.tstat, p), ...
+         'FontSize', fontSize);
 end
 
 %% 
@@ -269,12 +289,13 @@ nPhases = numel(PHASES);
 if bShowIndS
     figure('Position', [50, 50, 1200, 350]);
     for j0 = 1 : 3 
-        if j0 == 1;         meas = rmI_byP;     measName = 'intensity';
-        elseif j0 == 2;     meas = rmF0_byP;    measName = 'F0';
-        elseif j0 == 3;     meas = rdur_byP;    measName = 'duration';
+        if j0 == 1;         meas = rmI_byP;     measName = 'intensity'; measNota = 'M_I';
+        elseif j0 == 2;     meas = rmF0_byP;    measName = 'F0';        measNota = 'M_F';
+        elseif j0 == 3;     meas = rdur_byP;    measName = 'duration';  measNota = 'M_D';
         end
         
         subplot(1, 3, j0);
+        set(gca, 'FontSize', fontSize);
         hold on;
         plot([0, nPhases + 1], [1, 1], '-', ...
              'Color', [0.5, 0.5, 0.5]);
@@ -352,11 +373,13 @@ for k0 = 0 : 1 : nPerm * bPerm
     for j0 = 1 : 3 + bCPA
         if k0 == 0
             if j0 == 4
-                byP_hdls(j0) = figure('Name', 'Composite prosody adaptation');
+                byP_hdls(j0) = figure('Position', [100, 100, 500, 360], ...
+                                      'Name', 'Composite prosody adaptation');
             else
                 byP_hdls(j0) = subplot(1, 3, j0);
             end
         end
+        set(gca, 'FontSize', fontSize);
 
         hold on;
 
@@ -364,18 +387,22 @@ for k0 = 0 : 1 : nPerm * bPerm
             meas = rmI_byP;
             meas1 = mI_byP;
             measName = 'intensity';
+            measNota = 'M_I';
         elseif j0 == 2
             meas = rmF0_byP;
             meas1 = mF0_byP;
             measName = 'F0';
+            measNota = 'M_F';
         elseif j0 == 3
             meas = rdur_byP;
             meas1 = dur_byP;
             measName = 'duration';
+            measNota = 'M_D';
         elseif j0 == 4
             meas = cpa_byP;
             meas1 = [];
             measName = 'CPA';
+            measNota = 'P';
         end
         
         % --- Random permutation --- %
@@ -395,11 +422,18 @@ for k0 = 0 : 1 : nPerm * bPerm
             end
             xlabel('Phase');
             if bCD
-                ylabel(['Normalized ', measName, ' C.D.']);
+                ylabel(sprintf('Normalized contrast distance for %s (%s)', ...
+                               measName, measNota));
             else
-                ylabel(['Normalized ', measName]);
+                ylabel(sprintf('Normalized %s (%s)', ...
+                               measName, measNota));
             end
-            title(measName);
+            
+            if j0 <= 3
+                title(sprintf('%c: %s', char(64 + j0), measName));
+            else
+                title(sprintf('%s', measName));
+            end
 
             set(gca, 'XLim', [0, nPhases + 1]);
             set(gca, 'XTick', [1 : nPhases]);
@@ -408,9 +442,18 @@ for k0 = 0 : 1 : nPerm * bPerm
             ys = get(gca, 'YLim');
         end
 
+        if j0 == 4
+            set(gca, 'YLim', [0.4, 1.6]);
+            ys = get(gca, 'YLim');
+        end
+        
         % Between-group, same-phase t-tests        
         for i1 = 2 : numel(PHASES)
-            [~, p_t2, ~, t2_stats] = ttest2(meas.(SDIRS{1})(:, i1), meas.(SDIRS{2})(:, i1));
+            if ~bRS
+                [~, p_t2, ~, t2_stats] = ttest2(meas.(SDIRS{1})(:, i1), meas.(SDIRS{2})(:, i1));
+            else
+                [p_t2, ~, t2_stats] = ranksum(meas.(SDIRS{1})(:, i1), meas.(SDIRS{2})(:, i1));
+            end
             
             if k0 == 0
                 if p_t2 < P_UNC_THRESH_BY_EPOCH
@@ -419,12 +462,16 @@ for k0 = 0 : 1 : nPerm * bPerm
                     fw = 'normal';
                 end
                 
-                text(i1 - 0.3, ys(2) - 0.05 * range(ys), sprintf('p=%.3f', p_t2), 'FontWeight', fw);
+                text(i1 - 0.3, ys(2) - 0.05 * range(ys), sprintf('%.3f', p_t2), 'FontWeight', fw, 'FontSize', fontSize);
                 
                 unc_ps(i1, j0) = p_t2;
             else
                 rp_ps(k0, i1, j0) = p_t2;
-                rp_ts(k0, i1, j0) = t2_stats.tstat;
+                if ~bRS
+                    rp_ts(k0, i1, j0) = t2_stats.tstat;
+                else
+                    rp_ts(k0, i1, j0) = t2_stats.zval;
+                end
                 
                 if mod(k0, round(nPerm / 10)) == 0
                     for k1 = 1 : nc; fprintf(1, '\b'); end 
@@ -434,9 +481,11 @@ for k0 = 0 : 1 : nPerm * bPerm
         end
         
         if k0 == 0
-            text(0.1, ys(2) - 0.05 * range(ys), 'b/w group:');
+            text(0.1, ys(2) - 0.05 * range(ys), 'b/w group:', 'FontSize', fontSize);
 
-            legend(SDIRS, 'Location', 'Southwest');
+            if j0 == 1 || j0 == 4
+                legend(SDIRS, 'Location', 'Southwest');
+            end
             plot([0, nPhases + 1], [1, 1], '-', 'Color', [0.5, 0.5, 0.5]);        
 
             % Within-group, between-phase t-tests
@@ -447,9 +496,18 @@ for k0 = 0 : 1 : nPerm * bPerm
                 ys = get(gca, 'YLim');
                 for i1 = 2 : numel(PHASES)
                     if j0 < 4
-                        [~, ps_t(i1)] = ttest(meas1.(sDir)(:, i1), meas1.(sDir)(:, 1));
+                        if ~bRS
+                            [~, ps_t(i1)] = ttest(meas1.(sDir)(:, i1), meas1.(sDir)(:, 1));
+                        else
+                            [ps_t(i1), ~] = signrank(meas1.(sDir)(:, i1) - meas1.(sDir)(:, 1));
+                        end
+                        unc_wg_cpa_ps.(sDir)(i1) = ps_t(i1);
                     else
-                        [~, ps_t(i1)] = ttest(meas.(sDir)(:, i1) - 1);
+                        if ~bRS
+                            [~, ps_t(i1)] = ttest(meas.(sDir)(:, i1) - 1);
+                        else
+                            [ps_t(i1), ~] = signrank(meas.(sDir)(:, i1), 1);
+                        end
                         unc_wg_cpa_ps.(sDir)(i1) = ps_t(i1);
                     end
 
@@ -460,7 +518,7 @@ for k0 = 0 : 1 : nPerm * bPerm
                     end
                     text(i1 + 0.07, mean_meas(i1) - 0.02 * range(ys), ...
                          sprintf('%.3f', ps_t(i1)), ...
-                         'Color', colors.(sDir), 'FontSize', 9, 'FontWeight', fw);
+                         'Color', colors.(sDir), 'FontSize', fontSize, 'FontWeight', fw);
                 end        
             end
 
@@ -496,9 +554,16 @@ for k0 = 0 : 1 : nPerm * bPerm
     %                         sg_meas = meas1.(sDir)(:, i1) .* sgn.(sDir);                    
                         sg_meas = (meas.(sDir)(:, i1) - 1) .* sgn.(sDir);                    
 
-                        [~, t_p, ~, t_stats] = ttest(sg_meas);
-                        rp_wg_cpa_ps.(sDir)(k0, i1) = t_p;
-                        rp_wg_cpa_ts.(sDir)(k0, i1) = t_stats.tstat;
+                        if ~bRS
+                            [~, t_p, ~, t_stats] = ttest(sg_meas);
+                            rp_wg_cpa_ps.(sDir)(k0, i1) = t_p;
+                            rp_wg_cpa_ts.(sDir)(k0, i1) = t_stats.tstat;
+                        else
+                            [t_p, ~, t_stats] = signrank(sg_meas, 1);
+                            rp_wg_cpa_ps.(sDir)(k0, i1) = t_p;
+                            rp_wg_cpa_ts.(sDir)(k0, i1) = t_stats.signedrank;
+                        end
+                        
                     end
                 end
             end
@@ -510,7 +575,7 @@ end
 if nPerm > 0 && bPerm
     fprintf(1, '\n');
     
-    save(permMatFN, 'rp_ps', 'rp_ts');
+    save(permMatFN, 'rp_ps', 'rp_ts', 'rp_wg_cpa_ps', 'rp_wg_cpa_ts');
     check_file(permMatFN);
     fprintf(1, 'INFO: random permutation data saved to file: %s\n\n', permMatFN);
 end
@@ -543,8 +608,8 @@ if nPerm > 0
                 fw = 'normal';
             end
             
-            text(i2 - 0.3, ys(2) - 0.10 * range(ys), sprintf('p=%.3f', t_corr_p), ...
-                 'FontWeight', fw);
+            text(i2 - 0.3, ys(2) - 0.10 * range(ys), sprintf('%.3f', t_corr_p), ...
+                 'FontSize', fontSize, 'FontWeight', fw);
             
             fprintf(1, '\t\t%s: p = %.4f', PHASES{i2}, t_corr_p);
             if t_corr_p < P_PERMCORR_THRESH
@@ -569,7 +634,7 @@ if nPerm > 0
                         
                     text(i2 + 0.07, mean_meas(i2) - 0.05 * range(ys), ...                       
                          sprintf('%.3f', t_corr_p_wg), ...
-                         'Color', colors.(sDir), 'FontSize', 9, 'FontWeight', fw);
+                         'Color', colors.(sDir), 'FontSize', fontSize, 'FontWeight', fw);
                 end
                 
             end
@@ -618,7 +683,7 @@ if bCPA && bCorrPert
                 t_y = [meas.(SDIRS{1})(:, 3); meas.(SDIRS{2})(:, 3)];
                 [k, r2, p] = lincorr(t_x, t_y);
                 dClr = [0, 0, 0];
-                dDir = 'BOTH'
+                dDir = 'BOTH';
             end
 
             plot(xs, k(1) + k(2) * xs, '-', 'Color', dClr);
@@ -646,7 +711,9 @@ if bShowByEpoch
         else
             subplot(1, 3, j0);
         end
+        set(gca, 'FontSize', fontSize);
         hold on;
+        
 
         if j0 == 1
             meas = rmI_byE;
@@ -789,6 +856,7 @@ if bShowByEpoch
                     end
                     
                     subplot(1, 3, k3); 
+                    set(gca, 'FontSize', fontSize);
                     axis tight;
                     plot(1 : length(iem), iem, 'bo-'); 
                     ylabel(measName);
