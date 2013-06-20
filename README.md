@@ -45,5 +45,7 @@ Usage exapmles:
 	Note: you may need to revise the "L3_DATA_DIR" variable to set the correct path to the level-3 (in Kevin's parlance) csv files.
 	
   11. Use the rank-sum and signed rank tests, instead of the default t-tests; perform random permutation for 10,000 iterations, and do not show the uncorrected p-values in the figures:
-         
         intShift_analysis_1(1, [1, 2], 'cpa', 'loadCache', 'rs', 'permute', 10000, 'noUnc')
+
+  12. Use subtraction-based normalization, instead of the default divsion-based one.
+		intShift_analysis_1(1, [1, 2], 'subtr', 'loadCache', 'rs', 'permute', 1000)

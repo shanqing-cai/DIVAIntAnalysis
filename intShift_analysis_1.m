@@ -10,6 +10,8 @@ function intShift_analysis_1(bCD, nStresses, varargin)
 %           Reverse data between stressed (perturbed) and unstressed
 %           (unpertrubed) words, e.g., for looking at the data from the
 %           unstresed words
+% subtr:
+%           Use substraction normalization    
 % permute N: 
 %           Perform permutation test: N iterations (N > 0)
 % corrPert:
@@ -51,6 +53,13 @@ if bCD && bReverse
     error('reverse can not be used with contrast distance');
 end
 
+bSubtr = ~isempty(fsic(varargin, 'subtr'));
+
+if bCPA && bSubtr
+    error('Options cpa and subtr should not be used together');
+end
+
+
 bRS = 0;
 if ~isempty(fsic(varargin, 'rs'))
     bRS = 1;
@@ -63,7 +72,18 @@ if ~isempty(fsic(varargin, 'permute'))
     
     check_dir('perm_files', '-create');
         
-    permMatFN = fullfile('perm_files', sprintf('perm_dat_%d.mat', nPerm));
+    if isequal(nStresses, [1, 2])
+        permMatFN = fullfile('perm_files', sprintf('perm_dat_%d.mat', nPerm));
+    elseif length(nStresses) == 1
+        permMatFN = fullfile('perm_files', sprintf('perm_dat_stress%d_%d.mat', nStresses, nPerm));
+    else
+        error('Invalid input: nStresses');
+    end
+    
+    if bSubtr
+        permMatFN = strrep(permMatFN, '.mat', '_subtr.mat');
+    end
+    
     if bRS 
         permMatFN = strrep(permMatFN, '.mat', '_rs.mat');
     end
@@ -84,9 +104,20 @@ end
 bNoUnc = ~isempty(fsic(varargin, 'noUnc'));
 
 %% Load data
-cacheDataFN = sprintf('%s_cache_bCD%d.mat', mfilename, bCD);
-if bLoadCache
-    check_file(cacheDataFN);
+if isequal(nStresses, [1, 2])
+    cacheDataFN = sprintf('%s_cache_bCD%d.mat', mfilename, bCD);
+elseif length(nStresses) == 1
+    cacheDataFN = sprintf('%s_cache_bCD%d_stress%d.mat', mfilename, bCD, nStresses);
+else
+    error('Invalid input: nStresses');
+end
+
+if bSubtr
+    cacheDataFN = strrep(cacheDataFN, '.mat', '_subtr.mat');
+end
+    
+if bLoadCache && isfile(cacheDataFN)    
+%     check_file(cacheDataFN);
     load(cacheDataFN);
     fprintf(1, 'INFO: Loaded cached group-level data from file: %s\n', cacheDataFN);
 else
@@ -196,9 +227,15 @@ else
             dur_byP.(sDir) = [dur_byP.(sDir); p_dur];
 
             % Compute relative changes from the Base phase (by phase)
-            rmF0_byP.(sDir) = [rmF0_byP.(sDir); p_mF0 / p_mF0(1)];
-            rmI_byP.(sDir) = [rmI_byP.(sDir); p_mI / p_mI(1)];
-            rdur_byP.(sDir) = [rdur_byP.(sDir); p_dur / p_dur(1)];
+            if ~bSubtr
+                rmF0_byP.(sDir) = [rmF0_byP.(sDir); p_mF0 / p_mF0(1)];
+                rmI_byP.(sDir) = [rmI_byP.(sDir); p_mI / p_mI(1)];
+                rdur_byP.(sDir) = [rdur_byP.(sDir); p_dur / p_dur(1)];
+            else
+                rmF0_byP.(sDir) = [rmF0_byP.(sDir); p_mF0 - p_mF0(1)];
+                rmI_byP.(sDir) = [rmI_byP.(sDir); p_mI - p_mI(1)];
+                rdur_byP.(sDir) = [rdur_byP.(sDir); p_dur - p_dur(1)];
+            end
 
             % By-epoch data
             e_mF0 = nan(1, NEPOCHS);
@@ -224,7 +261,7 @@ else
 end
 
 %% Save cache file
-if ~bLoadCache
+if ~bLoadCache || ~isfile(cacheDataFN)
     save(cacheDataFN, 'sIDs', 'mF0_byP', 'mI_byP', 'dur_byP', ...
          'rmF0_byP', 'rmI_byP', 'rdur_byP', ...
          'mF0_byE', 'mI_byE', 'dur_byE', ...
@@ -234,6 +271,30 @@ if ~bLoadCache
         save(cacheDataFN, 'pertContr_mn', '-append');
     end
 end
+
+%% Plot the unnormalized data
+% figure('Position', [50, 50, 1200, 350], 'Name', 'Subtraction-normalized data');
+% for i1 = 1 : 3
+%     if i1 == 1
+%         undat = mI_byP;
+%     elseif i1 == 2
+%         undat = mF0_byP;
+%     elseif i1 == 3
+%         undat = dur_byP;
+%     end
+%     
+%     
+%     subplot(1, 3, i1);
+%     hold on;
+%     
+%     for i2 = 1 : numel(SDIRS)
+%         sDir = SDIRS{i2};
+%         
+%         undat.(sDir) = undat.(sDir) - repmat(undat.(sDir)(:, 1), 1, size(undat.(sDir), 2));        
+%         errorbar(1 : 4, mean(undat.(sDir)), ste(undat.(sDir)), 'o-', 'Color', colors.(sDir));
+%     end
+%     set(gca ,'XTick', [1 : 4], 'XTickLabel', PHASES);
+% end
     
 %% Optional:  Calculate the composite prosody adaptation (CPA) score
 if bCPA
@@ -493,7 +554,12 @@ for k0 = 0 : 1 : nPerm * bPerm
             if j0 == 1 || j0 == 4
                 legend(SDIRS, 'Location', 'Southwest');
             end
-            plot([0, nPhases + 1], [1, 1], '-', 'Color', [0.5, 0.5, 0.5]);        
+            
+            if ~bSubtr
+                plot([0, nPhases + 1], [1, 1], '-', 'Color', [0.5, 0.5, 0.5]);
+            else
+                plot([0, nPhases + 1], [0, 0], '-', 'Color', [0.5, 0.5, 0.5]);
+            end
 
             % Within-group, between-phase t-tests
             for i0 = 1 : numel(SDIRS)
@@ -511,9 +577,9 @@ for k0 = 0 : 1 : nPerm * bPerm
                         unc_wg_cpa_ps.(sDir)(i1) = ps_t(i1);
                     else
                         if ~bRS
-                            [~, ps_t(i1)] = ttest(meas.(sDir)(:, i1) - 1);
-                        else
-                            [ps_t(i1), ~] = signrank(meas.(sDir)(:, i1), 1);
+                            [~, ps_t(i1)] = ttest(meas.(sDir)(:, i1) - (1 - bSubtr));
+                        else                            
+                            [ps_t(i1), ~] = signrank(meas.(sDir)(:, i1), 1 - bSubtr);
                         end
                         unc_wg_cpa_ps.(sDir)(i1) = ps_t(i1);
                     end
@@ -559,9 +625,9 @@ for k0 = 0 : 1 : nPerm * bPerm
                 for i0 = 1 : numel(SDIRS)
                     sDir = SDIRS{i0};
                     for i1 = 2 : numel(PHASES)                        
-    %                         sg_meas = meas1.(sDir)(:, i1) .* sgn.(sDir);                    
-                        sg_meas = (meas.(sDir)(:, i1) - 1) .* sgn.(sDir);                    
-
+    %                         sg_meas = meas1.(sDir)(:, i1) .* sgn.(sDir);
+                        sg_meas = (meas.(sDir)(:, i1) - (1 - bSubtr)) .* sgn.(sDir);
+                        
                         if ~bRS
                             [~, t_p, ~, t_stats] = ttest(sg_meas);
                             rp_wg_cpa_ps.(sDir)(k0, i1, j0) = t_p;
@@ -819,7 +885,11 @@ if bShowByEpoch
         text(0.1, ys(2) - 0.04 * range(ys), 'b/w group:');
 
         legend(SDIRS, 'Location', 'Southwest');
-        plot([0, NEPOCHS + 1], [1, 1], '-', 'Color', [0.5, 0.5, 0.5]);
+        if ~bSubstr
+            plot([0, NEPOCHS + 1], [1, 1], '-', 'Color', [0.5, 0.5, 0.5]);
+        else
+            plot([0, NEPOCHS + 1], [0, 0], '-', 'Color', [0.5, 0.5, 0.5]);
+        end
 
         % Within-group, between-phase t-tests
 %         for i0 = 1 : numel(SDIRS)
