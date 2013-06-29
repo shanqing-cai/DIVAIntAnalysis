@@ -22,6 +22,12 @@ function intShift_analysis_1(bCD, nStresses, varargin)
 %           Use ranksum test, rather than the default t-test
 % noUnc:    
 %           Do not show uncorrected p-values
+% peakF0:
+%           Use peak F0, instead of the default mean F0
+% peakInt: 
+%           Use peak intensity, intead of the default mean intensity
+% cent: 
+%           Convert F0 to cents before doing the stats
 
 %% CONFIG
 DATA_DIR = 'E:\DATA_CadLab\IntensityShift_normal';
@@ -65,6 +71,9 @@ if ~isempty(fsic(varargin, 'rs'))
     bRS = 1;
 end
 
+bPeakF0 = ~isempty(fsic(varargin, 'peakF0'));
+bPeakInt = ~isempty(fsic(varargin, 'peakInt'));
+
 nPerm = 0;
 if ~isempty(fsic(varargin, 'permute'))
     nPerm = varargin{fsic(varargin, 'permute') + 1};
@@ -84,10 +93,18 @@ if ~isempty(fsic(varargin, 'permute'))
         permMatFN = strrep(permMatFN, '.mat', '_subtr.mat');
     end
     
-    if bRS 
+    if bRS
         permMatFN = strrep(permMatFN, '.mat', '_rs.mat');
     end
-        
+    
+    if bPeakF0
+        permMatFN = strrep(permMatFN, '.mat', '_pF0.mat');
+    end
+    
+    if bPeakInt
+        permMatFN = strrep(permMatFN, '.mat', '_pInt.mat');
+    end
+
 end
 
 bCorrPert = 0;
@@ -102,6 +119,8 @@ if ~isempty(fsic(varargin, 'loadCache'))
 end
 
 bNoUnc = ~isempty(fsic(varargin, 'noUnc'));
+
+
 
 %% Load data
 if isequal(nStresses, [1, 2])
@@ -183,14 +202,65 @@ else
 
             sData = intShift_readSubjData(fullfile(dDir, stat_fns(i1).name), ...
                                           bCD, 'nStresses', nStresses, revWord);
+                       
+            t_sID = strrep(stat_fns(i1).name, '.stat', '');
+            t_L3DatFN = fullfile(L3_DATA_DIR, ...
+                                 sprintf('%s (%s).csv', t_sID, sDir));
+            if bPeakF0 || bPeakInt
+                if ~isfile(t_L3DatFN)
+                    error('WARNING: bCorrPert: Failed to find L3 data file for subject %s: "%s"\n', ...
+                          t_sID, t_L3DatFN);
+                else
+                    fprintf(1, 'INFO: bPeakF0 || bPeakInt: Loading L3 data for subject %s from file "%s"\n', ...
+                            t_sID, t_L3DatFN);
+
+                    dl3 = csvread(t_L3DatFN);
+                    assert(size(dl3, 2) == 10);
+                    
+                    dl3_trialNums = dl3(:, 1);
+                    
+                    if bPeakF0
+                        if bCD % Warning: works under bCD == 1 only
+                            dl3_pF0 = dl3(:, 7) - dl3(:, 8);
+                            % Reorder and replace
+                            sData.pF0 = nan(size(sData.mF0));
+                            for k1 = 1 : numel(sData.trialNum)
+                                if ~isempty(find(dl3_trialNums == sData.trialNum(k1)))
+                                    sData.pF0(k1) = dl3_pF0(find(dl3_trialNums == sData.trialNum(k1)));
+                                else
+                                    fprintf(2, 'WARNING: bPeakF0: In subject %s: cannot find dl3 peak F0 / intensity entry for trial #%d\n', ...
+                                            t_sID, sData.trialNum(k1));
+                                end
+                            end      
+                            sData.mF0_old = sData.mF0;
+                            sData.mF0 = sData.pF0;                       
+                        end
+                    end
+                    
+                    if bPeakInt
+                        if bCD % Warning: works under bCD == 1 only
+                            dl3_pI = dl3(:, 5) - dl3(:, 6);
+                            % Reorder and replace
+                            sData.pI = nan(size(sData.mI));
+                            for k1 = 1 : numel(sData.trialNum)
+                                if ~isempty(find(dl3_trialNums == sData.trialNum(k1)))
+                                    sData.pI(k1) = dl3_pI(find(dl3_trialNums == sData.trialNum(k1)));
+                                else
+                                    fprintf(2, 'WARNING: bPeakInt: In subject %s: cannot find dl3 peak F0 / intensity entry for trial #%d\n', ...
+                                            t_sID, sData.trialNum(k1));
+                                end
+                            end      
+                            sData.mI_old = sData.mI;
+                            sData.mI = sData.pI;
+                        end
+                    end
+                end
+            end
 
             if bCorrPert
-                t_sID = strrep(stat_fns(i1).name, '.stat', '');
-                t_L3DatFN = fullfile(L3_DATA_DIR, ...
-                                     sprintf('%s (%s).csv', t_sID, sDir));
                 if ~isfile(t_L3DatFN)
-                    fprintf(2, 'WARNING: bCorrPert: Failed to find L3 data file for subject %s: "%s"\n', ...
-                            t_sID, t_L3DatFN);
+                    error('WARNING: bCorrPert: Failed to find L3 data file for subject %s: "%s"\n', ...
+                          t_sID, t_L3DatFN);
 
                     pertContr_mn.(sDir)(end + 1) = NaN;
                 else
@@ -418,8 +488,10 @@ end
 unc_ps = nan(4, 3 + bCPA); % Phases, # of tests
 byP_hdls = nan(1, 3 + bCPA);
 
-unc_wg_cpa_ps.DN = nan(4, 1); % Phases
-unc_wg_cpa_ps.UP = nan(4, 1); % Phases
+% unc_wg_cpa_ps.DN = nan(4, 1);
+% unc_wg_cpa_ps.UP = nan(4, 1);
+unc_wg_cpa_ps.DN = nan(4, 3 + bCPA); % Phases, # of tests
+unc_wg_cpa_ps.UP = nan(4, 3 + bCPA); % Phases, # of tests
 
 txt_hdls_wg.DN = nan(4, 3 + bCPA); % Phases, # of tests
 txt_hdls_wg.UP = nan(4, 3 + bCPA); % Phases, # of tests
@@ -431,11 +503,15 @@ for k0 = 0 : 1 : nPerm * bPerm
         if k0 == 1
             nc = print_progress_bar(0, nPerm, sprintf('Performing permutation test (by phase)'));
         end
+        
         rpidx = randperm(nTot);
+%         rpidx = 1 : nTot;
         
         % -- Sign reassignment for the two groups -- %
         sgn.DN = (rand(nDN, 1) > 0.5) * 2 - 1;
         sgn.UP = (rand(nUP, 1) > 0.5) * 2 - 1;
+%         sgn.DN = ones(nDN, 1);
+%         sgn.UP = ones(nUP, 1);
     end
     
     for j0 = 1 : 3 + bCPA
@@ -474,6 +550,7 @@ for k0 = 0 : 1 : nPerm * bPerm
         end
         
         % --- Random permutation --- %
+        meas_unp = meas;
         if k0 >= 1
             meas_a = [meas.DN; meas.UP];
             meas_a = meas_a(rpidx, :);
@@ -574,14 +651,14 @@ for k0 = 0 : 1 : nPerm * bPerm
                         else
                             [ps_t(i1), ~] = signrank(meas1.(sDir)(:, i1) - meas1.(sDir)(:, 1));
                         end
-                        unc_wg_cpa_ps.(sDir)(i1) = ps_t(i1);
+                        unc_wg_cpa_ps.(sDir)(i1, j0) = ps_t(i1);
                     else
                         if ~bRS
                             [~, ps_t(i1)] = ttest(meas.(sDir)(:, i1) - (1 - bSubtr));
                         else                            
                             [ps_t(i1), ~] = signrank(meas.(sDir)(:, i1), 1 - bSubtr);
                         end
-                        unc_wg_cpa_ps.(sDir)(i1) = ps_t(i1);
+                        unc_wg_cpa_ps.(sDir)(i1, j0) = ps_t(i1);
                     end
 
                     if ps_t(i1) < 0.05
@@ -626,7 +703,7 @@ for k0 = 0 : 1 : nPerm * bPerm
                     sDir = SDIRS{i0};
                     for i1 = 2 : numel(PHASES)                        
     %                         sg_meas = meas1.(sDir)(:, i1) .* sgn.(sDir);
-                        sg_meas = (meas.(sDir)(:, i1) - (1 - bSubtr)) .* sgn.(sDir);
+                        sg_meas = (meas_unp.(sDir)(:, i1) - (1 - bSubtr)) .* sgn.(sDir);
                         
                         if ~bRS
                             [~, t_p, ~, t_stats] = ttest(sg_meas);
@@ -708,8 +785,8 @@ if nPerm > 0
                            rp_wg_cpa_ps.(SDIRS{2})(:, 2 : end, i1)];
                 min_t_ps_wg = min(t_ps_wg, [], 2);                
 
-                t_corr_p_wg = numel(find(min_t_ps_wg <= unc_wg_cpa_ps.(sDir)(i2))) / nPerm;
-    
+                t_corr_p_wg = numel(find(min_t_ps_wg <= unc_wg_cpa_ps.(sDir)(i2, i1))) / nPerm; % ???
+                
                 if i1 == 1
                     mean_meas = mean(rmI_byP.(sDir));
                 elseif i1 == 2

@@ -23,6 +23,7 @@ if DEBUG
     fprintf(1, 'INFO: length(headers) == %d\n', lenHeaders);
 end
 
+cTrialNum = strmatch('Trial', headers, 'exact');
 cStress = strmatch('Stress', headers, 'exact');
 cmF0_w1 = strmatch('W1_mF0', headers, 'exact');
 cmI_w1 = strmatch('W1_mI', headers, 'exact');
@@ -37,6 +38,7 @@ cEpoch = strmatch('Epoch', headers, 'exact');
 
 txt = txt(3 : end);
 
+sData.trialNum = [];
 sData.mF0 = [];     % Mean F0
 sData.mI = [];  % Mean intensity
 sData.dur = []; % Duration of stressed word
@@ -54,6 +56,7 @@ for i0 = 1 : numel(txt)
     if ~isequal(fsic(tline, ''), idxEmptyHeaders)
         fprintf(2, 'WARNING: Mismatch in empty string locations between tline and headers\n');
     end
+    
     
     nStress = tline{cStress};
     nStress = str2num(nStress(end));    
@@ -82,6 +85,8 @@ for i0 = 1 : numel(txt)
     sData.stim(end + 1) = nStim;
     sData.epoch(end + 1) = nEpoch;       
     sData.nStress(end + 1) = nStress;
+    
+    sData.trialNum(end + 1) = str2double(strrep(lower(tline(cTrialNum)), 'trial', ''));
     
     if bCD == 1
         sData.mF0(end + 1) = str2double(tline{cmF0_w1 + nStress - 1}) - ...
