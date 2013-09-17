@@ -40,6 +40,8 @@ colors.UP = 'r';
 PHASES = {'Base', 'Ramp', 'Pert', 'Post'};
 NEPOCHS = 60;
 
+nPhases = numel(PHASES);
+
 indS_figs_dir = 'E:\speechres\cadlab\indS_figs';
 
 wPros = [1.0, 1.0, 1.0];    % For CPA: prosody weights: [w_intensity, w_F0 and w_dur]
@@ -74,6 +76,13 @@ end
 bPeakF0 = ~isempty(fsic(varargin, 'peakF0'));
 bPeakInt = ~isempty(fsic(varargin, 'peakInt'));
 
+bNoRamp = ~isempty(fsic(varargin, 'noRamp'));
+if bNoRamp
+    idxNoRamp = setxor([1 : nPhases], 2);
+else
+    idxNoRamp = 1 : nPhases;
+end
+
 nPerm = 0;
 if ~isempty(fsic(varargin, 'permute'))
     nPerm = varargin{fsic(varargin, 'permute') + 1};
@@ -103,6 +112,10 @@ if ~isempty(fsic(varargin, 'permute'))
     
     if bPeakInt
         permMatFN = strrep(permMatFN, '.mat', '_pInt.mat');
+    end
+    
+    if bNoRamp
+        permMatFN = strrep(permMatFN, '.mat', '_noRamp.mat');
     end
 
 end
@@ -419,7 +432,7 @@ if bCorrPert
 end
 
 %% 
-nPhases = numel(PHASES);
+
 if bShowIndS
     figure('Position', [50, 50, 1200, 350]);
     for j0 = 1 : 3 
@@ -549,6 +562,18 @@ for k0 = 0 : 1 : nPerm * bPerm
             measNota = 'P';
         end
         
+        if bNoRamp
+            flds = fields(meas);
+            for h0 = 1 : length(flds)
+                fld = flds{h0};
+                meas.(fld) = meas.(fld)(:, idxNoRamp);
+                
+                if ~isempty(meas1)
+                    meas1.(fld) = meas1.(fld)(:, idxNoRamp);
+                end
+            end
+        end
+        
         % --- Random permutation --- %
         meas_unp = meas;
         if k0 >= 1
@@ -580,9 +605,10 @@ for k0 = 0 : 1 : nPerm * bPerm
                 title(sprintf('%s', measName));
             end
 
-            set(gca, 'XLim', [0, nPhases + 1]);
-            set(gca, 'XTick', [1 : nPhases]);
-            set(gca, 'XTickLabel', PHASES);
+            set(gca, 'XLim', [0, length(idxNoRamp) + 1]);
+            
+            set(gca, 'XTick', 1 : length(idxNoRamp));
+            set(gca, 'XTickLabel', PHASES(idxNoRamp));
             
             ys = get(gca, 'YLim');
         end
@@ -593,7 +619,7 @@ for k0 = 0 : 1 : nPerm * bPerm
         end
         
         % Between-group, same-phase t-tests        
-        for i1 = 2 : numel(PHASES)
+        for i1 = 2 : size(meas.(SDIRS{1}), 2)
             if ~bRS
                 [~, p_t2, ~, t2_stats] = ttest2(meas.(SDIRS{1})(:, i1), meas.(SDIRS{2})(:, i1));
             else
@@ -641,10 +667,10 @@ for k0 = 0 : 1 : nPerm * bPerm
             % Within-group, between-phase t-tests
             for i0 = 1 : numel(SDIRS)
                 sDir = SDIRS{i0};
-                ps_t = nan(1, numel(PHASES));
-                mean_meas = mean(meas.(sDir));  
+                ps_t = nan(1, size(meas.(SDIRS{1}), 2));
+                mean_meas = mean(meas.(sDir));
                 ys = get(gca, 'YLim');
-                for i1 = 2 : numel(PHASES)
+                for i1 = 2 : size(meas.(SDIRS{1}), 2)
                     if j0 < 4
                         if ~bRS
                             [~, ps_t(i1)] = ttest(meas1.(sDir)(:, i1), meas1.(sDir)(:, 1));
@@ -677,22 +703,31 @@ for k0 = 0 : 1 : nPerm * bPerm
             if j0 < 4
                 for i1 = 1 : numel(SDIRS)
                     sDir = SDIRS{i1};
-                    rma_res = RM_ANOVA_1W(meas1.(sDir), PHASES, ...
-                                          'contrasts', {[-1, 1, 0, 0], ...
-                                                        [-1, 0, 1, 0], ...
-                                                        [-1, 0, 0, 1]});
+                    
+                    if ~bNoRamp
+                        contrastVectors = {[-1, 1, 0, 0], ...
+                                           [-1, 0, 1, 0], ...
+                                           [-1, 0, 0, 1]};
+                        contrastNames = {'Base vs. Ramp', 'Base vs. Pert', 'Base vs. Post'};
+                    else
+                        contrastVectors = {[-1, 1, 0], ...
+                                           [-1, 0, 1]};
+                        contrastNames = {'Base vs. Pert', 'Base vs. Post'};
+                    end                                                       
+                    
+                    rma_res = RM_ANOVA_1W(meas1.(sDir), PHASES(idxNoRamp), ...
+                                          'contrasts', contrastVectors);
                     fprintf('%s: sDir = %s: RM-ANOVA results:\n', ...
                             measName, sDir);
                     fprintf('Omnibus: F(%d, %d) = %.3f, p = %3f\n', ...
                             rma_res.omniRes.df_A, rma_res.omniRes.df_SA, ...
                             rma_res.omniRes.F, rma_res.omniRes.p);
                     fprintf('Post-hoc Tukey HSD: \n');
-                    fprintf('\tBase vs. Ramp: h = %d\n', ...
-                            rma_res.tukeyRes{1}.h);
-                    fprintf('\tBase vs. Pert: h = %d\n', ...
-                            rma_res.tukeyRes{2}.h);
-                    fprintf('\tBase vs. Post: h = %d\n', ...
-                            rma_res.tukeyRes{3}.h);
+                    
+                    for h0 = 1 : numel(contrastVectors)
+                        fprintf(1, '\t%s: h = %d\n', ...
+                                contrastNames{h0}, rma_res.tukeyRes{h0}.h);
+                    end
                 end
                 fprintf('\n');
             end 
@@ -701,7 +736,7 @@ for k0 = 0 : 1 : nPerm * bPerm
 %             if j0 == 4
                 for i0 = 1 : numel(SDIRS)
                     sDir = SDIRS{i0};
-                    for i1 = 2 : numel(PHASES)                        
+                    for i1 = 2 : size(meas_unp.(sDir), 2)
     %                         sg_meas = meas1.(sDir)(:, i1) .* sgn.(sDir);
                         sg_meas = (meas_unp.(sDir)(:, i1) - (1 - bSubtr)) .* sgn.(sDir);
                         
@@ -745,7 +780,7 @@ if nPerm > 0
         min_t_ps = min(t_ps');
         fprintf(1, '\t== %s: ==\n', itemNames{i1});
         
-        for i2 = 2 : numel(PHASES)
+        for i2 = 2 : numel(PHASES(idxNoRamp))
             t_corr_p = numel(find(min_t_ps <= unc_ps(i2, i1))) / nPerm;
             
             if i1 <= 3
@@ -788,13 +823,13 @@ if nPerm > 0
                 t_corr_p_wg = numel(find(min_t_ps_wg <= unc_wg_cpa_ps.(sDir)(i2, i1))) / nPerm; % ???
                 
                 if i1 == 1
-                    mean_meas = mean(rmI_byP.(sDir));
+                    mean_meas = mean(rmI_byP.(sDir)(:, idxNoRamp));
                 elseif i1 == 2
-                    mean_meas = mean(rmF0_byP.(sDir));
+                    mean_meas = mean(rmF0_byP.(sDir)(:, idxNoRamp));
                 elseif i1 == 3
-                    mean_meas = mean(rdur_byP.(sDir));
+                    mean_meas = mean(rdur_byP.(sDir)(:, idxNoRamp));
                 elseif i1 == 4
-                    mean_meas = mean(cpa_byP.(sDir));
+                    mean_meas = mean(cpa_byP.(sDir)(:, idxNoRamp));
                 end
                 if t_corr_p_wg < P_PERMCORR_THRESH
                     fw = 'bold';
@@ -962,7 +997,7 @@ if bShowByEpoch
         text(0.1, ys(2) - 0.04 * range(ys), 'b/w group:');
 
         legend(SDIRS, 'Location', 'Southwest');
-        if ~bSubstr
+        if ~bSubtr
             plot([0, NEPOCHS + 1], [1, 1], '-', 'Color', [0.5, 0.5, 0.5]);
         else
             plot([0, NEPOCHS + 1], [0, 0], '-', 'Color', [0.5, 0.5, 0.5]);
